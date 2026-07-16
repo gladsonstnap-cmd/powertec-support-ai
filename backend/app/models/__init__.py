@@ -1,0 +1,62 @@
+from app.models.customer import Customer, Establishment
+from app.models.device import Device
+from app.models.knowledge import (
+    KnowledgeApproval,
+    KnowledgeChunk,
+    KnowledgeDocument,
+    KnowledgeDocumentVersion,
+    KnowledgeProduct,
+    KnowledgeSearchLog,
+    KnowledgeTag,
+    SupportAuditLog,
+    TicketAnalysis,
+)
+from app.models.messaging import (
+    Contact,
+    ConversationSession,
+    ConversationStateTransition,
+    MessageAttachment,
+    MessagingEvent,
+    MessagingMessage,
+    ProtocolCounter,
+    TemporaryCustomer,
+    TicketMessage,
+)
+from app.models.product import Product, ProductVersion
+from app.models.tenant import Tenant
+from app.models.ticket import Ticket
+from app.models.user import Permission, RefreshToken, Role, RolePermission, User, UserRole
+
+__all__ = [
+    "Customer",
+    "Contact",
+    "ConversationSession",
+    "ConversationStateTransition",
+    "Device",
+    "Establishment",
+    "KnowledgeApproval",
+    "KnowledgeChunk",
+    "KnowledgeDocument",
+    "KnowledgeDocumentVersion",
+    "KnowledgeProduct",
+    "KnowledgeSearchLog",
+    "KnowledgeTag",
+    "MessageAttachment",
+    "MessagingEvent",
+    "MessagingMessage",
+    "Permission",
+    "Product",
+    "ProductVersion",
+    "ProtocolCounter",
+    "RefreshToken",
+    "Role",
+    "RolePermission",
+    "Tenant",
+    "TemporaryCustomer",
+    "Ticket",
+    "TicketAnalysis",
+    "TicketMessage",
+    "SupportAuditLog",
+    "User",
+    "UserRole",
+]

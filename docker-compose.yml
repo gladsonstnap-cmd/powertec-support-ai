@@ -1,0 +1,294 @@
+name: powertec-support-ai
+
+x-backend-environment: &backend-environment
+  APP_NAME: ${APP_NAME:-PowerTec Support AI}
+  APP_ENV: ${APP_ENV:-development}
+
+  DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://powertec:powertec_dev_password@postgres:5432/powertec_support}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+
+  SECRET_KEY: ${SECRET_KEY:-change-me-in-development}
+  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+  REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+
+  BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:3000}
+
+  POSTGRES_DB: ${POSTGRES_DB:-powertec_support}
+  POSTGRES_USER: ${POSTGRES_USER:-powertec}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-powertec_dev_password}
+
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-powertec}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-powertec_dev_secret}
+  S3_BUCKET: ${S3_BUCKET:-powertec-support-files}
+
+  SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+  DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-change-this-demo-password}
+
+  WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-mock}
+  WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-}
+  WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+  WHATSAPP_BUSINESS_ACCOUNT_ID: ${WHATSAPP_BUSINESS_ACCOUNT_ID:-}
+  WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-change-me}
+  WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-change-me}
+  WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-change-me}
+  WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
+  WHATSAPP_MAX_MEDIA_SIZE_MB: ${WHATSAPP_MAX_MEDIA_SIZE_MB:-20}
+  WHATSAPP_REQUEST_TIMEOUT_SECONDS: ${WHATSAPP_REQUEST_TIMEOUT_SECONDS:-30}
+  MESSAGING_SIMULATOR_ENABLED: ${MESSAGING_SIMULATOR_ENABLED:-true}
+
+  AI_PROVIDER: ${AI_PROVIDER:-mock}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_MODEL: ${OPENAI_MODEL:-}
+  AI_REQUEST_TIMEOUT_SECONDS: ${AI_REQUEST_TIMEOUT_SECONDS:-45}
+  AI_MAX_CONTEXT_MESSAGES: ${AI_MAX_CONTEXT_MESSAGES:-30}
+  AI_MAX_CONTEXT_CHARACTERS: ${AI_MAX_CONTEXT_CHARACTERS:-30000}
+
+  KNOWLEDGE_MAX_FILE_SIZE_MB: ${KNOWLEDGE_MAX_FILE_SIZE_MB:-20}
+  KNOWLEDGE_CHUNK_SIZE: ${KNOWLEDGE_CHUNK_SIZE:-1200}
+  KNOWLEDGE_CHUNK_OVERLAP: ${KNOWLEDGE_CHUNK_OVERLAP:-150}
+  KNOWLEDGE_REQUIRE_APPROVAL: ${KNOWLEDGE_REQUIRE_APPROVAL:-true}
+
+  GITHUB_APP_ID: ${GITHUB_APP_ID:-change-me}
+  GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-change-me}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-powertec_support}
+      POSTGRES_USER: ${POSTGRES_USER:-powertec}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-powertec_dev_password}
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+
+    command:
+      - server
+      - /data
+      - --console-address
+      - ":9001"
+
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-powertec}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-powertec_dev_secret}
+
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+    volumes:
+      - minio_data:/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    environment:
+      <<: *backend-environment
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+      redis:
+        condition: service_healthy
+
+      minio:
+        condition: service_started
+
+    ports:
+      - "8000:8000"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs', timeout=10)"
+        ]
+      interval: 20s
+      timeout: 15s
+      retries: 10
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000/api/v1}
+      NODE_ENV: ${NODE_ENV:-development}
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    ports:
+      - "3000:3000"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const http=require('http');const req=http.get('http://127.0.0.1:3000/health.txt',(res)=>{res.resume();process.exit(res.statusCode===200?0:1)});req.setTimeout(15000,()=>{req.destroy();process.exit(1)});req.on('error',()=>process.exit(1));"
+        ]
+      interval: 30s
+      timeout: 20s
+      start_period: 90s
+      retries: 10
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app
+      - worker
+      - --loglevel=INFO
+      - --concurrency=2
+
+    environment:
+      <<: *backend-environment
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+      redis:
+        condition: service_healthy
+
+      backend:
+        condition: service_healthy
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app
+      - beat
+      - --loglevel=INFO
+
+    environment:
+      <<: *backend-environment
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+      redis:
+        condition: service_healthy
+
+      backend:
+        condition: service_healthy
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    profiles:
+      - jobs
+
+    command:
+      - alembic
+      - upgrade
+      - head
+
+    environment:
+      <<: *backend-environment
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    restart: "no"
+
+  seed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    profiles:
+      - jobs
+
+    command:
+      - python
+      - -m
+      - app.scripts.seed_dev
+
+    environment:
+      <<: *backend-environment
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    restart: "no"
+
+volumes:
+  postgres_data:
+    name: powertec-support-ai_postgres_data
+
+  minio_data:
+    name: powertec-support-ai_minio_data

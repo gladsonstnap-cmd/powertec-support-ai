@@ -1,0 +1,33 @@
+export type TicketPriority = "P1" | "P2" | "P3" | "P4";
+export type TicketStatus = "novo" | "triagem" | "aguardando_cliente" | "em_atendimento" | "resolvido" | "encerrado" | "cancelado";
+
+export type Ticket = {
+  id: string;
+  protocol: string;
+  customer_id?: string | null;
+  customer_name?: string | null;
+  contact_name?: string | null;
+  company_name?: string | null;
+  phone?: string | null;
+  establishment_id?: string | null;
+  product_id?: string | null;
+  product_name?: string | null;
+  analysis_product?: string | null;
+  system_name?: string | null;
+  module?: string | null;
+  device?: string | null;
+  priority?: TicketPriority | null;
+  analysis_priority?: TicketPriority | null;
+  status: TicketStatus | string;
+  description?: string;
+  ai_summary?: string | null;
+  analysis_summary?: string | null;
+  analysis_confidence?: number | null;
+  analysis_requires_human?: boolean | null;
+  analysis_requires_authorization?: boolean | null;
+  analysis_triggered_rules?: string[];
+  opened_at: string;
+  created_at?: string;
+  updated_at?: string;
+  closed_at?: string | null;
+};
