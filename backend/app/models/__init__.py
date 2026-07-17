@@ -1,5 +1,12 @@
 from app.models.customer import Customer, Establishment
 from app.models.device import Device
+from app.models.ai_orchestrator import (
+    AIApproval,
+    AIDiagnosticSession,
+    AIHypothesis,
+    AIPlanStep,
+    AISessionEvent,
+)
 from app.models.knowledge import (
     KnowledgeApproval,
     KnowledgeChunk,
@@ -29,6 +36,11 @@ from app.models.user import Permission, RefreshToken, Role, RolePermission, User
 
 __all__ = [
     "Customer",
+    "AIApproval",
+    "AIDiagnosticSession",
+    "AIHypothesis",
+    "AIPlanStep",
+    "AISessionEvent",
     "Contact",
     "ConversationSession",
     "ConversationStateTransition",

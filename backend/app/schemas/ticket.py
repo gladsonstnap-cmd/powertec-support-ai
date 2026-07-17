@@ -42,6 +42,7 @@ class TicketSummaryRead(OrmModel):
     priority: TicketPriority | None = None
     analysis_priority: TicketPriority | None = None
     status: str
+    description: str | None = None
     analysis_summary: str | None = None
     analysis_confidence: int | None = None
     analysis_requires_human: bool | None = None

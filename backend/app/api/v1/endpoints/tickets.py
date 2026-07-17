@@ -41,6 +41,7 @@ def _summary_from_row(row) -> TicketSummaryRead:
         priority=ticket.priority,
         analysis_priority=row.analysis_priority,
         status=ticket.status,
+        description=getattr(ticket, "description", None),
         analysis_summary=row.analysis_summary,
         analysis_confidence=row.analysis_confidence,
         analysis_requires_human=row.analysis_requires_human,

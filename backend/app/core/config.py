@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     knowledge_chunk_size: int = 1200
     knowledge_chunk_overlap: int = 150
     knowledge_require_approval: bool = True
+    ai_orchestrator_enabled: bool = True
+    ai_orchestrator_max_steps: int = 12
+    ai_orchestrator_max_tool_attempts: int = 2
+    ai_orchestrator_failure_threshold: int = 3
+    ai_orchestrator_simulation_only: bool = True
 
     @property
     def cors_origins(self) -> list[str]:

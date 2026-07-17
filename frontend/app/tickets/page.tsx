@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
+import { AIDiagnosticPanel } from "@/components/ai-diagnostic-panel";
 import { AppShell } from "@/components/app-shell";
 import { PriorityBadge } from "@/components/status-badge";
 import { apiJson } from "@/lib/api";
@@ -115,6 +116,7 @@ function TicketsContent() {
                             <Detail label="Resumo da analise" value={ticket.analysis_summary || "Sem analise"} />
                             <Detail label="Regras acionadas" value={ticket.analysis_triggered_rules?.join(", ") || "Nenhuma regra registrada"} />
                           </div>
+                          <AIDiagnosticPanel ticket={ticket} />
                         </td>
                       </tr>
                     ) : null}
