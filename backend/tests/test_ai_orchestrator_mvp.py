@@ -15,23 +15,15 @@ def test_classifier_returns_structured_network_incident():
     assert result.category == "NETWORK_SERVER"
     assert result.priority.value == "HIGH"
     assert result.confidence == pytest.approx(0.91)
-    assert [hypothesis.code for hypothesis in result.hypotheses] == ["database_service_stopped", "database_port_blocked", "dns_failure"]
+    assert [hypothesis.code for hypothesis in result.hypotheses] == ["database_service_stopped", "database_port_blocked", "dns_failure", "server_unreachable"]
 
 
 def test_planner_generates_expected_sql_service_plan():
     classification = classify_incident("Todos os caixas perderam conexao com o servidor.")
     plan = build_plan(classification, "sql_service_stopped")
 
-    assert [step.tool_name for step in plan] == [
-        "network.ping",
-        "network.dns_lookup",
-        "network.test_port",
-        "windows.service_status",
-        "windows.service_restart",
-        "windows.service_status",
-    ]
-    assert plan[4].risk_level == AIRiskLevel.SAFE_ACTION
-    assert plan[4].requires_approval is True
+    assert [step.tool_name for step in plan] == ["network.ping", "network.dns_lookup", "network.test_port", "windows.service_status"]
+    assert all(step.risk_level == AIRiskLevel.READ_ONLY for step in plan)
 
 
 def test_read_only_tool_executes_without_real_system_access():
@@ -105,7 +97,8 @@ def test_failure_threshold_escalates_after_three_failures():
 
 def test_resolution_requires_evidence():
     assert has_resolution_evidence([]) is False
-    assert has_resolution_evidence([{"success": True, "evidence": {"status": "running"}}]) is True
+    assert has_resolution_evidence([{"success": True, "evidence": {"status": "running"}}]) is False
+    assert has_resolution_evidence([{"evidence_codes": ["SERVICE_RESTARTED"]}, {"evidence_codes": ["SERVICE_RUNNING"]}]) is True
     assert has_resolution_evidence([{"success": True, "evidence": {}}]) is False
 
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pendingApprovalStep, progressLabel, SIMULATION_NOTICE, statusLabel } from "../lib/ai-sessions";
+import { categoryLabel, decisionLabel, evidenceSummary, hypothesisStatusLabel, pendingApprovalStep, progressLabel, riskLabel, SIMULATION_NOTICE, sortedHypotheses, statusLabel } from "../lib/ai-sessions";
 import type { AIDiagnosticSession } from "../types/ai-session";
 
 describe("ai diagnostic frontend contract", () => {
@@ -13,6 +13,13 @@ describe("ai diagnostic frontend contract", () => {
 
   it("keeps the simulation warning visible", () => {
     expect(SIMULATION_NOTICE).toContain("nenhum comando real foi executado");
+  });
+
+  it("renders friendly operational labels", () => {
+    expect(categoryLabel("NETWORK_SERVER")).toBe("Rede / Servidor");
+    expect(riskLabel("READ_ONLY")).toBe("Somente leitura");
+    expect(hypothesisStatusLabel("CONFIRMED")).toBe("Confirmada");
+    expect(decisionLabel("WAIT_APPROVAL")).toBe("Aguardar aprovacao");
   });
 
   it("shows progress using executed and maximum steps", () => {
@@ -29,6 +36,23 @@ describe("ai diagnostic frontend contract", () => {
     });
 
     expect(pendingApprovalStep(current)?.title).toBe("Reiniciar SQL Server");
+  });
+
+  it("orders hypotheses by probability", () => {
+    const current = session({
+      hypotheses: [
+        hypothesis({ id: "h1", title: "Baixa", probability: 0.1 }),
+        hypothesis({ id: "h2", title: "Alta", probability: 0.8 })
+      ]
+    });
+
+    expect(sortedHypotheses(current).map((item) => item.title)).toEqual(["Alta", "Baixa"]);
+  });
+
+  it("shows evidence summary with fallback for old responses", () => {
+    expect(evidenceSummary(step({ evidence_result: { summary: "Porta fechada." } }))).toBe("Porta fechada.");
+    expect(evidenceSummary(step({ result: { message: "Resultado antigo." } }))).toBe("Resultado antigo.");
+    expect(evidenceSummary(step({}))).toBe("Sem resultado registrado.");
   });
 
   it("returns no pending approval for running sessions", () => {
@@ -56,8 +80,29 @@ function session(overrides: Partial<AIDiagnosticSession>): AIDiagnosticSession {
     plan_steps: [],
     approvals: [],
     events: [],
+    last_decision: null,
+    decision_reason: null,
+    recommended_tool: null,
+    final_confidence: null,
     ...overrides
   };
+}
+
+function hypothesis(overrides: Record<string, unknown>) {
+  return {
+    id: "hypothesis",
+    code: "database_service_stopped",
+    title: "Servico parado",
+    description: "Servico SQL pode estar parado.",
+    probability: 0.5,
+    rank: 1,
+    status: "ACTIVE",
+    evidence: {},
+    supporting_evidence: [],
+    contradicting_evidence: [],
+    last_updated_reason: null,
+    ...overrides
+  } as AIDiagnosticSession["hypotheses"][number];
 }
 
 function step(overrides: Record<string, unknown>) {

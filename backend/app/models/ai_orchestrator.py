@@ -90,6 +90,10 @@ class AIDiagnosticSession(IdMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_decision: Mapped[str | None] = mapped_column(String(40))
+    decision_reason: Mapped[str | None] = mapped_column(Text)
+    recommended_tool: Mapped[str | None] = mapped_column(String(120))
+    final_confidence: Mapped[float | None] = mapped_column(Float)
 
 
 class AIHypothesis(IdMixin, Base):
@@ -104,6 +108,9 @@ class AIHypothesis(IdMixin, Base):
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="OPEN")
     evidence: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    supporting_evidence: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    contradicting_evidence: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    last_updated_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
@@ -124,6 +131,9 @@ class AIPlanStep(IdMixin, Base):
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     result: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    selection_reason: Mapped[str | None] = mapped_column(Text)
+    evidence_result: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    is_dynamic: Mapped[bool] = mapped_column(nullable=False, default=False)
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -25,6 +25,9 @@ class AIHypothesisRead(BaseModel):
     rank: int
     status: str
     evidence: dict
+    supporting_evidence: list[str] = Field(default_factory=list)
+    contradicting_evidence: list[str] = Field(default_factory=list)
+    last_updated_reason: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -45,6 +48,9 @@ class AIPlanStepRead(BaseModel):
     attempt_count: int
     max_attempts: int
     result: dict
+    selection_reason: str | None = None
+    evidence_result: dict = Field(default_factory=dict)
+    is_dynamic: bool = False
     error_message: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -118,3 +124,7 @@ class AIDiagnosticSessionRead(BaseModel):
     plan_steps: list[AIPlanStepRead] = Field(default_factory=list)
     approvals: list[AIApprovalRead] = Field(default_factory=list)
     events: list[AISessionEventRead] = Field(default_factory=list)
+    last_decision: str | None = None
+    decision_reason: str | None = None
+    recommended_tool: str | None = None
+    final_confidence: float | None = None

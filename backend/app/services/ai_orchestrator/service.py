@@ -29,11 +29,14 @@ from app.schemas.ai_orchestrator import (
     AISessionEventRead,
 )
 from app.services.ai_orchestrator.classifier import classify_incident
-from app.services.ai_orchestrator.planner import build_plan
+from app.services.ai_orchestrator.decision_engine import OrchestratorDecision, decide_next
+from app.services.ai_orchestrator.evaluator import completed_result_from_step_status, evaluate_tool_result, has_resolution_evidence, should_escalate_after_failures
+from app.services.ai_orchestrator.hypothesis_engine import update_hypotheses_from_evidence
+from app.services.ai_orchestrator.planner import PlanStepDraft, build_plan, dynamic_step
 from app.services.ai_orchestrator.policy import PolicyEngine
 from app.services.ai_orchestrator.state_machine import InvalidStateTransition, assert_transition
+from app.services.ai_orchestrator.tool_selector import select_next_step
 from app.services.ai_orchestrator.tools import execute_tool
-from app.services.ai_orchestrator.evaluator import completed_result_from_step_status, has_resolution_evidence, should_escalate_after_failures
 
 
 TERMINAL_STATUSES = {AISessionStatus.RESOLVED.value, AISessionStatus.ESCALATED.value, AISessionStatus.FAILED.value, AISessionStatus.CANCELLED.value}
@@ -84,7 +87,11 @@ class AIOrchestratorService:
                     description=hypothesis.description,
                     probability=hypothesis.probability,
                     rank=rank,
+                    status="ACTIVE",
                     evidence={},
+                    supporting_evidence=[],
+                    contradicting_evidence=[],
+                    last_updated_reason="Hipotese inicial gerada pelo classificador deterministico.",
                 )
             )
         self._event(session, "CLASSIFIED", "Incidente classificado por regras deterministicas.", {"category": classification.category})
@@ -108,10 +115,13 @@ class AIOrchestratorService:
                         risk_level=step.risk_level.value,
                         requires_approval=step.requires_approval,
                         max_attempts=self.settings.ai_orchestrator_max_tool_attempts,
+                        selection_reason=step.selection_reason,
+                        is_dynamic=step.is_dynamic,
                     )
                 )
             self._event(session, "PLAN_CREATED", "Plano de diagnostico simulado criado.", {"steps": len(plan)})
             self._transition(session, AISessionStatus.READY)
+            self._apply_decision(session, OrchestratorDecision("CONTINUE", "Plano inicial criado com ferramentas seguras de maior valor diagnostico.", classification.confidence, classification.hypotheses[0].code if classification.hypotheses else None, plan[0].tool_name if plan else None))
         self.db.commit()
         return self.get_session(session.id, user)
 
@@ -132,9 +142,14 @@ class AIOrchestratorService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="AI session is terminal")
         if session.status == AISessionStatus.WAITING_APPROVAL.value:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="AI session is waiting approval")
-        step = self._next_executable_step(session)
+        self._maybe_replan(session)
+        hypotheses = self._hypotheses(session)
+        steps = self._steps(session)
+        selection = select_next_step(hypotheses, steps)
+        step = selection.step
         if step is None:
-            self._evaluate_completion(session)
+            self._apply_decision(session, decide_next(hypotheses, steps, session.max_steps, session.executed_steps))
+            self._apply_terminal_decision(session)
             self.db.commit()
             return self._read(session)
         if session.executed_steps >= session.max_steps:
@@ -145,12 +160,14 @@ class AIOrchestratorService:
             self.db.commit()
             return self._read(session)
         decision = self.policy.decide(step.tool_name, step.parameters, session.autonomy_level, step.risk_level)
+        step.selection_reason = selection.reason
         session.current_risk_level = step.risk_level
         if decision.needs_approval:
             step.status = AIPlanStepStatus.WAITING_APPROVAL.value
             session.status = AISessionStatus.WAITING_APPROVAL.value
             self.db.add(AIApproval(tenant_id=session.tenant_id, session_id=session.id, plan_step_id=step.id))
             self._event(session, "APPROVAL_REQUESTED", decision.reason, {"step_id": str(step.id), "tool_name": step.tool_name})
+            self._apply_decision(session, OrchestratorDecision("WAIT_APPROVAL", decision.reason, step.attempt_count / max(step.max_attempts, 1), None, step.tool_name))
             self.db.commit()
             return self._read(session)
         if not decision.allowed:
@@ -255,6 +272,13 @@ class AIOrchestratorService:
         try:
             result = execute_tool(step.tool_name, step.parameters)
             step.result = result
+            evidence = evaluate_tool_result(step.tool_name, result)
+            step.evidence_result = {
+                "evidence_codes": evidence.evidence_codes,
+                "summary": evidence.summary,
+                "conclusive": evidence.conclusive,
+                "needs_followup": evidence.needs_followup,
+            }
             step.error_message = None if result["success"] else result["message"]
             step.status = AIPlanStepStatus.COMPLETED.value if result["success"] else AIPlanStepStatus.FAILED.value
         except ValueError as exc:
@@ -264,7 +288,7 @@ class AIOrchestratorService:
         step.finished_at = now_utc()
         session.executed_steps += 1
         self._transition(session, AISessionStatus.ANALYZING_RESULT)
-        self._event(session, "TOOL_EXECUTED", "Ferramenta simulada executada.", {"step_id": str(step.id), "tool_name": step.tool_name, "success": step.status == AIPlanStepStatus.COMPLETED.value})
+        self._event(session, "TOOL_EXECUTED", "Ferramenta simulada executada.", {"step_id": str(step.id), "tool_name": step.tool_name, "success": step.status == AIPlanStepStatus.COMPLETED.value, "evidence_codes": step.evidence_result.get("evidence_codes", [])})
 
     def _evaluate_after_step(self, session: AIDiagnosticSession, step: AIPlanStep) -> None:
         if step.status == AIPlanStepStatus.FAILED.value:
@@ -272,7 +296,14 @@ class AIOrchestratorService:
             self._evaluate_failure(session, step.error_message or "Tool failed.")
             return
         session.consecutive_failures = 0
-        self._evaluate_completion(session)
+        evidence_codes = [str(code) for code in step.evidence_result.get("evidence_codes", [])]
+        hypotheses = self._hypotheses(session)
+        update_hypotheses_from_evidence(hypotheses, evidence_codes)
+        self._event(session, "EVIDENCE_EVALUATED", step.evidence_result.get("summary", "Evidencia avaliada."), {"step_id": str(step.id), "evidence_codes": evidence_codes})
+        self._maybe_replan(session)
+        decision = decide_next(hypotheses, self._steps(session), session.max_steps, session.executed_steps)
+        self._apply_decision(session, decision)
+        self._apply_terminal_decision(session)
 
     def _evaluate_failure(self, session: AIDiagnosticSession, reason: str) -> None:
         if should_escalate_after_failures(session.consecutive_failures, self.settings.ai_orchestrator_failure_threshold):
@@ -301,6 +332,76 @@ class AIOrchestratorService:
             session.escalation_reason = "Nao ha evidencias suficientes para marcar como resolvido."
             session.finished_at = now_utc()
             self._event(session, "ESCALATED", session.escalation_reason)
+
+    def _hypotheses(self, session: AIDiagnosticSession) -> list[AIHypothesis]:
+        return list(self.db.scalars(select(AIHypothesis).where(AIHypothesis.session_id == session.id).order_by(AIHypothesis.rank)))
+
+    def _has_step(self, session: AIDiagnosticSession, tool_name: str, title: str | None = None) -> bool:
+        steps = self._steps(session)
+        return any(step.tool_name == tool_name and (title is None or step.title == title) for step in steps)
+
+    def _add_step(self, session: AIDiagnosticSession, draft: PlanStepDraft) -> None:
+        self.db.add(
+            AIPlanStep(
+                tenant_id=session.tenant_id,
+                session_id=session.id,
+                sequence=draft.sequence,
+                tool_name=draft.tool_name,
+                title=draft.title,
+                description=draft.description,
+                parameters=draft.parameters,
+                risk_level=draft.risk_level.value,
+                requires_approval=draft.requires_approval,
+                max_attempts=self.settings.ai_orchestrator_max_tool_attempts,
+                selection_reason=draft.selection_reason,
+                is_dynamic=draft.is_dynamic,
+            )
+        )
+        self._event(session, "PLAN_REPLANNED", f"Etapa dinamica adicionada: {draft.tool_name}.", {"tool_name": draft.tool_name, "reason": draft.selection_reason})
+
+    def _maybe_replan(self, session: AIDiagnosticSession) -> None:
+        steps = self._steps(session)
+        if len(steps) >= session.max_steps:
+            return
+        codes = {code for step in steps for code in step.result.get("evidence_codes", [])}
+        next_sequence = max([step.sequence for step in steps], default=0) + 1
+        if "SERVICE_STOPPED" in codes and not self._has_step(session, "windows.service_restart"):
+            self._add_step(session, dynamic_step(next_sequence, "windows.service_restart", session.simulation_scenario, "Servico parado confirmou a necessidade de acao segura simulada."))
+            return
+        if "SERVICE_RESTARTED" in codes and not any(step.is_dynamic and step.tool_name == "windows.service_status" and step.status != AIPlanStepStatus.COMPLETED.value for step in steps) and not self._has_step(session, "network.test_port", "Confirmar porta SQL apos acao"):
+            self._add_step(session, dynamic_step(next_sequence, "windows.service_status", "healthy", "Verificacao posterior obrigatoria apos reinicio simulado."))
+            return
+        if "SERVICE_RUNNING" in codes and "DB_PORT_CLOSED" in codes and not self._has_step(session, "network.test_port", "Confirmar porta SQL apos acao"):
+            return
+
+    def _apply_decision(self, session: AIDiagnosticSession, decision: OrchestratorDecision) -> None:
+        session.last_decision = decision.decision
+        session.decision_reason = decision.reason
+        session.recommended_tool = decision.recommended_tool
+        session.final_confidence = decision.confidence
+        self._event(
+            session,
+            "DECISION_UPDATED",
+            decision.reason,
+            {
+                "decision": decision.decision,
+                "confidence": decision.confidence,
+                "next_hypothesis": decision.next_hypothesis,
+                "recommended_tool": decision.recommended_tool,
+            },
+        )
+
+    def _apply_terminal_decision(self, session: AIDiagnosticSession) -> None:
+        if session.last_decision == "RESOLVE":
+            session.status = AISessionStatus.RESOLVED.value
+            session.resolution_summary = "Diagnostico adaptativo simulado concluiu causa e verificacao posterior. Nenhum comando real foi executado."
+            session.finished_at = now_utc()
+            self._event(session, "RESOLVED", session.resolution_summary)
+        elif session.last_decision == "ESCALATE":
+            session.status = AISessionStatus.ESCALATED.value
+            session.escalation_reason = session.decision_reason
+            session.finished_at = now_utc()
+            self._event(session, "ESCALATED", session.escalation_reason or "Escalonado pelo motor de decisao.")
 
     def _next_executable_step(self, session: AIDiagnosticSession) -> AIPlanStep | None:
         return self.db.scalar(

@@ -15,6 +15,7 @@ export type AISessionStatus =
 export type AIPlanStepStatus = "PENDING" | "RUNNING" | "WAITING_APPROVAL" | "APPROVED" | "REJECTED" | "COMPLETED" | "FAILED" | "SKIPPED" | "CANCELLED";
 export type AIRiskLevel = "READ_ONLY" | "SAFE_ACTION" | "RESTRICTED" | "BLOCKED";
 export type AIAutonomyLevel = "DIAGNOSTIC_ONLY" | "SAFE_ACTIONS_WITH_APPROVAL" | "SAFE_ACTIONS_AUTOMATIC";
+export type AIHypothesisStatus = "ACTIVE" | "SUPPORTED" | "CONFIRMED" | "WEAKENED" | "REJECTED" | "INCONCLUSIVE" | "OPEN" | string;
 
 export type AIHypothesis = {
   id: string;
@@ -23,8 +24,11 @@ export type AIHypothesis = {
   description: string;
   probability: number;
   rank: number;
-  status: string;
+  status: AIHypothesisStatus;
   evidence: Record<string, unknown>;
+  supporting_evidence?: string[];
+  contradicting_evidence?: string[];
+  last_updated_reason?: string | null;
 };
 
 export type AIPlanStep = {
@@ -40,6 +44,14 @@ export type AIPlanStep = {
   attempt_count: number;
   max_attempts: number;
   result: Record<string, unknown>;
+  selection_reason?: string | null;
+  evidence_result?: {
+    evidence_codes?: string[];
+    summary?: string;
+    conclusive?: boolean;
+    needs_followup?: boolean;
+  } | Record<string, unknown>;
+  is_dynamic?: boolean;
   error_message?: string | null;
 };
 
@@ -83,4 +95,8 @@ export type AIDiagnosticSession = {
   plan_steps: AIPlanStep[];
   approvals: AIApproval[];
   events: AISessionEvent[];
+  last_decision?: string | null;
+  decision_reason?: string | null;
+  recommended_tool?: string | null;
+  final_confidence?: number | null;
 };

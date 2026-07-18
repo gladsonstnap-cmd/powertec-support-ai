@@ -5,13 +5,19 @@ import type { ReactNode } from "react";
 import {
   approveAiSession,
   cancelAiSession,
+  categoryLabel,
   createAiSession,
+  decisionLabel,
+  evidenceSummary,
+  hypothesisStatusLabel,
   listAiSessions,
   pendingApprovalStep,
   progressLabel,
   rejectAiSession,
+  riskLabel,
   runAiSession,
   SIMULATION_NOTICE,
+  sortedHypotheses,
   statusLabel
 } from "@/lib/ai-sessions";
 import type { AIDiagnosticSession } from "@/types/ai-session";
@@ -90,13 +96,22 @@ export function AIDiagnosticPanel({ ticket }: { ticket: Ticket }) {
         <div className="mt-4 space-y-4">
           <div className="grid gap-3 md:grid-cols-4">
             <Metric label="Status" value={statusLabel(session.status)} />
-            <Metric label="Categoria" value={session.category || "-"} />
+            <Metric label="Categoria" value={categoryLabel(session.category)} />
             <Metric label="Prioridade" value={session.priority || "-"} />
             <Metric label="Progresso" value={progressLabel(session)} />
             <Metric label="Confianca" value={session.confidence != null ? `${Math.round(session.confidence * 100)}%` : "-"} />
-            <Metric label="Risco atual" value={session.current_risk_level} />
+            <Metric label="Risco atual" value={riskLabel(session.current_risk_level)} />
             <Metric label="Autonomia" value={session.autonomy_level} />
             <Metric label="Cenario" value={session.simulation_scenario} />
+          </div>
+
+          <div className="rounded border border-slate-200 bg-slate-50 p-4 text-sm">
+            <div className="grid gap-3 md:grid-cols-3">
+              <Metric label="Decisao atual" value={decisionLabel(session.last_decision)} />
+              <Metric label="Ferramenta recomendada" value={session.recommended_tool || "-"} />
+              <Metric label="Confianca final" value={session.final_confidence != null ? `${Math.round(session.final_confidence * 100)}%` : "-"} />
+            </div>
+            {session.decision_reason ? <p className="mt-3 text-slate-700">{session.decision_reason}</p> : null}
           </div>
 
           {approvalStep ? (
@@ -104,7 +119,8 @@ export function AIDiagnosticPanel({ ticket }: { ticket: Ticket }) {
               <h4 className="font-semibold text-amber-900">Aprovacao pendente</h4>
               <p className="mt-1 text-amber-900">{approvalStep.title}</p>
               <p className="mt-1 text-amber-800">{approvalStep.description}</p>
-              <p className="mt-2 text-xs text-amber-800">Risco: {approvalStep.risk_level}. Acao simulada: {approvalStep.tool_name}.</p>
+              <p className="mt-2 text-xs text-amber-800">Risco: {riskLabel(approvalStep.risk_level)}. Acao simulada: {approvalStep.tool_name}.</p>
+              {approvalStep.selection_reason ? <p className="mt-1 text-xs text-amber-800">Motivo: {approvalStep.selection_reason}</p> : null}
               <div className="mt-3 flex gap-2">
                 <button className="rounded bg-emerald-600 px-3 py-2 text-white disabled:opacity-60" disabled={actionLoading} onClick={() => perform(() => approveAiSession(session.id))}>Aprovar</button>
                 <button className="rounded border border-amber-400 px-3 py-2 disabled:opacity-60" disabled={actionLoading} onClick={() => perform(() => rejectAiSession(session.id))}>Rejeitar</button>
@@ -113,23 +129,30 @@ export function AIDiagnosticPanel({ ticket }: { ticket: Ticket }) {
           ) : null}
 
           <Panel title="Hipoteses">
-            {session.hypotheses.map((hypothesis) => (
+            {sortedHypotheses(session).map((hypothesis) => (
               <li key={hypothesis.id} className="rounded border border-slate-200 p-3">
-                <div className="font-medium">{hypothesis.rank}. {hypothesis.title} <span className="text-slate-500">({Math.round(hypothesis.probability * 100)}%)</span></div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-medium">{hypothesis.rank}. {hypothesis.title} <span className="text-slate-500">({Math.round(hypothesis.probability * 100)}%)</span></div>
+                  <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{hypothesisStatusLabel(hypothesis.status)}</span>
+                </div>
                 <p className="mt-1 text-slate-600">{hypothesis.description}</p>
+                {hypothesis.last_updated_reason ? <p className="mt-2 text-xs text-slate-500">Ultima atualizacao: {hypothesis.last_updated_reason}</p> : null}
+                {hypothesis.supporting_evidence?.length ? <EvidenceList title="Evidencias favoraveis" values={hypothesis.supporting_evidence} /> : null}
+                {hypothesis.contradicting_evidence?.length ? <EvidenceList title="Evidencias contrarias" values={hypothesis.contradicting_evidence} /> : null}
               </li>
             ))}
           </Panel>
 
-          <Panel title="Plano">
+          <Panel title="Plano adaptativo">
             {session.plan_steps.map((step) => (
-              <li key={step.id} className="rounded border border-slate-200 p-3">
+              <li key={step.id} className={`rounded border p-3 ${step.is_dynamic ? "border-emerald-300 bg-emerald-50" : "border-slate-200"}`}>
                 <div className="flex flex-wrap justify-between gap-2">
-                  <span className="font-medium">{step.sequence}. {step.title}</span>
-                  <span className="text-xs text-slate-500">{step.status} / {step.risk_level}</span>
+                  <span className="font-medium">{step.sequence}. {step.title} {step.is_dynamic ? <span className="text-xs text-emerald-700">(adicionado dinamicamente)</span> : null}</span>
+                  <span className="text-xs text-slate-500">{step.status} / {riskLabel(step.risk_level)}</span>
                 </div>
                 <p className="mt-1 text-slate-600">{step.description}</p>
-                {step.result?.message ? <p className="mt-2 text-xs text-slate-500">Resultado: {String(step.result.message)}</p> : null}
+                {step.selection_reason ? <p className="mt-2 text-xs text-slate-500">Selecao: {step.selection_reason}</p> : null}
+                <p className="mt-2 text-xs text-slate-500">Resultado: {evidenceSummary(step)}</p>
                 {step.error_message ? <p className="mt-2 text-xs text-red-700">Erro: {step.error_message}</p> : null}
               </li>
             ))}
@@ -150,6 +173,17 @@ export function AIDiagnosticPanel({ ticket }: { ticket: Ticket }) {
         </div>
       ) : null}
     </section>
+  );
+}
+
+function EvidenceList({ title, values }: { title: string; values: string[] }) {
+  return (
+    <div className="mt-2 text-xs text-slate-600">
+      <div className="font-medium">{title}</div>
+      <ul className="mt-1 list-inside list-disc">
+        {values.map((value) => <li key={value}>{value}</li>)}
+      </ul>
+    </div>
   );
 }
 
