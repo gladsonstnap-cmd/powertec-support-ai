@@ -30,6 +30,7 @@ from app.models.messaging import (
     TicketMessage,
 )
 from app.models.product import Product, ProductVersion
+from app.models.remote_agent import AgentAuditEvent, AgentCommand, AgentCommandResult, RemoteAgent
 from app.models.tenant import Tenant
 from app.models.ticket import Ticket
 from app.models.user import Permission, RefreshToken, Role, RolePermission, User, UserRole
@@ -59,6 +60,10 @@ __all__ = [
     "Permission",
     "Product",
     "ProductVersion",
+    "RemoteAgent",
+    "AgentCommand",
+    "AgentCommandResult",
+    "AgentAuditEvent",
     "ProtocolCounter",
     "RefreshToken",
     "Role",

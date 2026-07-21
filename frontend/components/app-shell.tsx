@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Bot, Gauge, LogOut, Menu, PanelLeftClose, TicketCheck, X } from "lucide-react";
+import { BookOpen, Bot, Gauge, LogOut, Menu, MonitorCog, PanelLeftClose, TicketCheck, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useMemo, useState } from "react";
@@ -10,6 +10,7 @@ import { getCurrentUser, logout } from "@/lib/auth";
 const navItems = [
   { href: "/dashboard", label: "Visao geral", icon: Gauge },
   { href: "/tickets", label: "Chamados", icon: TicketCheck },
+  { href: "/agents", label: "Agentes", icon: MonitorCog },
   { href: "/dev/message-simulator", label: "Simulador", icon: Bot },
   { href: "/knowledge", label: "Base de conhecimento", icon: BookOpen }
 ];

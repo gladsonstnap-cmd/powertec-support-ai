@@ -164,7 +164,6 @@ services:
 
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000/api/v1}
-      NODE_ENV: ${NODE_ENV:-development}
       NEXT_TELEMETRY_DISABLED: "1"
 
     depends_on:
