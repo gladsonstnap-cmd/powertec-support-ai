@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.integrations.messaging.factory import get_messaging_provider
 from app.integrations.messaging.whatsapp.parser import normalize_meta_webhook
 from app.integrations.messaging.whatsapp.security import verify_meta_signature
 from app.models.messaging import MessagingEvent
-from app.services.messaging.whatsapp_webhook import default_webhook_tenant_id, process_normalized_messages
+from app.services.messaging.whatsapp_webhook import default_webhook_tenant_id, process_messages_and_send_initial_response
 
 router = APIRouter()
 
@@ -54,5 +55,5 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
         )
         db.commit()
         return {"status": "ignored", "processed": 0, "duplicates": 0, "unsupported": 0}
-    result = process_normalized_messages(db, tenant_id, messages)
+    result = await process_messages_and_send_initial_response(db, tenant_id, messages, get_messaging_provider())
     return {"status": "received", **result}

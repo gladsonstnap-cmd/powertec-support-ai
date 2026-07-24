@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.integrations.messaging.schemas import NormalizedWebhookMessage
+from app.integrations.messaging.exceptions import MessagingError
 from app.models.customer import Customer
 from app.models.messaging import Contact, ConversationSession, ConversationState, MessagingEvent, MessagingMessage, TicketMessage
 from app.models.tenant import Tenant
@@ -120,19 +121,36 @@ def _ensure_ticket(db: Session, tenant_id, session: ConversationSession, contact
     return ticket
 
 
+def generate_initial_response(contact_name: str | None, protocol: str) -> str:
+    if contact_name:
+        greeting = f"Olá, {contact_name}. Recebemos sua solicitação na PowerTec."
+    else:
+        greeting = "Olá! Recebemos sua solicitação na PowerTec."
+    return (
+        f"{greeting}\n\n"
+        f"Protocolo: {protocol}\n\n"
+        "Descreva com mais detalhes:\n"
+        "1 - Qual é o equipamento?\n"
+        "2 - Qual problema está apresentando?\n"
+        "3 - Quando o problema começou?"
+    )
+
+
 def process_normalized_messages(db: Session, tenant_id, messages: list[NormalizedWebhookMessage]) -> dict:
     processed = 0
     duplicates = 0
     unsupported = 0
+    response_candidates = []
     for message in messages:
-        if not message.supported:
+        valid_text = sanitize_text(message.text)
+        if not message.supported or not valid_text:
             unsupported += 1
             db.add(
                 MessagingEvent(
                     tenant_id=tenant_id,
                     provider=message.provider,
-                    event_type="unsupported_message",
-                    payload={"external_message_id": message.external_message_id, "reason": message.unsupported_reason},
+                    event_type="unsupported_message" if message.supported else "unsupported_message",
+                    payload={"external_message_id": message.external_message_id, "reason": message.unsupported_reason or "empty text"},
                     created_at=datetime.now(UTC),
                 )
             )
@@ -158,7 +176,7 @@ def process_normalized_messages(db: Session, tenant_id, messages: list[Normalize
             sender=message.sender,
             recipient=message.recipient,
             message_type=message.message_type,
-            text_content=sanitize_text(message.text),
+            text_content=valid_text,
             payload=message.raw_payload,
             status="received",
             processing_status="processed",
@@ -173,11 +191,39 @@ def process_normalized_messages(db: Session, tenant_id, messages: list[Normalize
         session.unread_count += 1
         session.updated_at = datetime.now(UTC)
         processed += 1
+        response_candidates.append(
+            {
+                "message": message,
+                "inbound": inbound,
+                "ticket": ticket,
+                "session": session,
+                "contact": contact,
+                "customer_id": session.customer_id,
+                "response_text": generate_initial_response(contact.name, ticket.protocol),
+            }
+        )
     db.commit()
-    return {"processed": processed, "duplicates": duplicates, "unsupported": unsupported}
+    return {"processed": processed, "duplicates": duplicates, "unsupported": unsupported, "response_candidates": response_candidates}
 
 
-async def send_text_response(db: Session, tenant_id, recipient: str, text: str, provider) -> MessagingMessage:
+def _safe_error_message(exc: Exception) -> str:
+    if isinstance(exc, MessagingError):
+        return str(exc)[:300]
+    return exc.__class__.__name__
+
+
+async def send_text_response(
+    db: Session,
+    tenant_id,
+    recipient: str,
+    text: str,
+    provider,
+    *,
+    ticket_id=None,
+    session_id=None,
+    contact_id=None,
+    customer_id=None,
+) -> MessagingMessage:
     result = await provider.send_text(recipient, text)
     outbound = MessagingMessage(
         tenant_id=tenant_id,
@@ -191,9 +237,62 @@ async def send_text_response(db: Session, tenant_id, recipient: str, text: str, 
         payload=result,
         status=result.get("status", "sent"),
         processing_status="processed",
+        customer_id=customer_id,
+        contact_id=contact_id,
+        ticket_id=ticket_id,
+        session_id=session_id,
         created_at=datetime.now(UTC),
         sent_at=datetime.now(UTC),
     )
     db.add(outbound)
     db.commit()
     return outbound
+
+
+async def send_automatic_responses(db: Session, tenant_id, response_candidates: list[dict], provider) -> dict:
+    sent = 0
+    failed = 0
+    for candidate in response_candidates:
+        message = candidate["message"]
+        ticket = candidate["ticket"]
+        session = candidate["session"]
+        contact = candidate["contact"]
+        text = candidate["response_text"]
+        if not text or not ticket or not session or not contact:
+            continue
+        try:
+            await send_text_response(
+                db,
+                tenant_id,
+                message.sender,
+                text,
+                provider,
+                ticket_id=ticket.id,
+                session_id=session.id,
+                contact_id=contact.id,
+                customer_id=candidate["customer_id"],
+            )
+            sent += 1
+        except Exception as exc:
+            failed += 1
+            db.add(
+                MessagingEvent(
+                    tenant_id=tenant_id,
+                    provider=getattr(provider, "provider_name", message.provider),
+                    event_type="automatic_response_failed",
+                    payload={
+                        "external_message_id": message.external_message_id,
+                        "ticket_id": str(ticket.id),
+                        "error": _safe_error_message(exc),
+                    },
+                    created_at=datetime.now(UTC),
+                )
+            )
+            db.commit()
+    return {"automatic_responses_sent": sent, "automatic_responses_failed": failed}
+
+
+async def process_messages_and_send_initial_response(db: Session, tenant_id, messages: list[NormalizedWebhookMessage], provider) -> dict:
+    result = process_normalized_messages(db, tenant_id, messages)
+    response_result = await send_automatic_responses(db, tenant_id, result.pop("response_candidates", []), provider)
+    return {**result, **response_result}
