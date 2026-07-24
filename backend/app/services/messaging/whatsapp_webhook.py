@@ -46,7 +46,7 @@ def _get_or_create_contact(db: Session, tenant_id, message: NormalizedWebhookMes
     return contact
 
 
-def _get_or_create_session(db: Session, tenant_id, contact: Contact, message: NormalizedWebhookMessage) -> ConversationSession:
+def _get_or_create_session(db: Session, tenant_id, contact: Contact, message: NormalizedWebhookMessage) -> tuple[ConversationSession, bool]:
     session = db.scalar(
         select(ConversationSession).where(
             ConversationSession.tenant_id == tenant_id,
@@ -55,14 +55,14 @@ def _get_or_create_session(db: Session, tenant_id, contact: Contact, message: No
         )
     )
     if session:
-        return session
+        return session, False
     session = ConversationSession(
         tenant_id=tenant_id,
         provider=message.provider,
         contact_id=contact.id,
         customer_id=contact.customer_id,
         phone=message.sender,
-        current_state=ConversationState.WAITING_ATTENDANT.value,
+        current_state=ConversationState.WAITING_EQUIPMENT.value,
         collected_data={"source": "whatsapp_cloud_api"},
         priority_rules=[],
         unread_count=0,
@@ -71,7 +71,7 @@ def _get_or_create_session(db: Session, tenant_id, contact: Contact, message: No
     )
     db.add(session)
     db.flush()
-    return session
+    return session, True
 
 
 def _ensure_customer(db: Session, tenant_id, contact: Contact, message: NormalizedWebhookMessage) -> Customer:
@@ -121,7 +121,7 @@ def _ensure_ticket(db: Session, tenant_id, session: ConversationSession, contact
     return ticket
 
 
-def generate_initial_response(contact_name: str | None, protocol: str) -> str:
+def build_initial_response(contact_name: str | None, protocol: str) -> str:
     if contact_name:
         greeting = f"Olá, {contact_name}. Recebemos sua solicitação na PowerTec."
     else:
@@ -134,6 +134,85 @@ def generate_initial_response(contact_name: str | None, protocol: str) -> str:
         "2 - Qual problema está apresentando?\n"
         "3 - Quando o problema começou?"
     )
+
+
+generate_initial_response = build_initial_response
+
+
+def build_ticket_summary(data: dict, protocol: str) -> str:
+    return (
+        "Resumo da solicitação:\n\n"
+        f"Equipamento: {data.get('equipment') or '-'}\n"
+        f"Problema: {data.get('problem') or '-'}\n"
+        f"Início: {data.get('problem_started_at_text') or '-'}\n"
+        f"Sinais observados: {data.get('symptoms') or '-'}\n\n"
+        f"Protocolo: {protocol}\n\n"
+        "Confirme com SIM ou informe o que deseja corrigir."
+    )
+
+
+def apply_collected_data_to_ticket(ticket: Ticket, data: dict) -> None:
+    equipment = sanitize_text(data.get("equipment"))
+    problem = sanitize_text(data.get("problem"))
+    started_at_text = sanitize_text(data.get("problem_started_at_text"))
+    symptoms = sanitize_text(data.get("symptoms"))
+    if equipment:
+        ticket.module = equipment[:80]
+    if problem:
+        ticket.description = problem
+    details = []
+    if equipment:
+        details.append(f"Equipamento: {equipment}")
+    if problem:
+        details.append(f"Problema: {problem}")
+    if started_at_text:
+        details.append(f"Início: {started_at_text}")
+    if symptoms:
+        details.append(f"Sinais observados: {symptoms}")
+    if details:
+        ticket.ai_summary = "Triagem determinística via WhatsApp.\n" + "\n".join(details)
+
+
+def handle_conversation_state(session: ConversationSession, ticket: Ticket, inbound_text: str, is_new_session: bool, contact_name: str | None) -> str:
+    data = dict(session.collected_data or {})
+    text = sanitize_text(inbound_text)
+    if is_new_session:
+        session.current_state = ConversationState.WAITING_EQUIPMENT.value
+        session.collected_data = data
+        apply_collected_data_to_ticket(ticket, data)
+        return build_initial_response(contact_name, ticket.protocol)
+
+    current_state = ConversationState(session.current_state)
+    if current_state == ConversationState.WAITING_EQUIPMENT:
+        data["equipment"] = text
+        session.current_state = ConversationState.WAITING_PROBLEM.value
+        response = "Qual problema o equipamento apresenta?"
+    elif current_state == ConversationState.WAITING_PROBLEM:
+        data["problem"] = text
+        session.current_state = ConversationState.WAITING_DATE.value
+        response = "Quando o problema começou?"
+    elif current_state == ConversationState.WAITING_DATE:
+        data["problem_started_at_text"] = text
+        session.current_state = ConversationState.WAITING_SYMPTOMS.value
+        response = "Existe algum sinal visível, como LED aceso, bip, tela, barulho ou cheiro de queimado?"
+    elif current_state == ConversationState.WAITING_SYMPTOMS:
+        data["symptoms"] = text
+        session.current_state = ConversationState.WAITING_CONFIRMATION.value
+        response = build_ticket_summary(data, ticket.protocol)
+    elif current_state == ConversationState.WAITING_CONFIRMATION:
+        if text.strip().lower() == "sim":
+            session.current_state = ConversationState.READY_FOR_ATTENDANT.value
+            ticket.status = TicketStatus.IN_SERVICE.value
+            response = f"Solicitação confirmada e encaminhada para atendimento humano.\n\nProtocolo: {ticket.protocol}"
+        else:
+            data["correction_request"] = text
+            session.current_state = ConversationState.WAITING_PROBLEM.value
+            response = "Qual informação deseja corrigir? Descreva o problema atualizado."
+    else:
+        response = f"Recebemos sua atualização no protocolo {ticket.protocol}. A solicitação permanece em atendimento."
+    session.collected_data = data
+    apply_collected_data_to_ticket(ticket, data)
+    return response
 
 
 def process_normalized_messages(db: Session, tenant_id, messages: list[NormalizedWebhookMessage]) -> dict:
@@ -166,8 +245,9 @@ def process_normalized_messages(db: Session, tenant_id, messages: list[Normalize
             duplicates += 1
             continue
         contact = _get_or_create_contact(db, tenant_id, message)
-        session = _get_or_create_session(db, tenant_id, contact, message)
+        session, is_new_session = _get_or_create_session(db, tenant_id, contact, message)
         ticket = _ensure_ticket(db, tenant_id, session, contact, message)
+        response_text = handle_conversation_state(session, ticket, valid_text, is_new_session, contact.name)
         inbound = MessagingMessage(
             tenant_id=tenant_id,
             external_message_id=message.external_message_id,
@@ -199,7 +279,7 @@ def process_normalized_messages(db: Session, tenant_id, messages: list[Normalize
                 "session": session,
                 "contact": contact,
                 "customer_id": session.customer_id,
-                "response_text": generate_initial_response(contact.name, ticket.protocol),
+                "response_text": response_text,
             }
         )
     db.commit()

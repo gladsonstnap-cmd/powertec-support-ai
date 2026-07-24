@@ -24,6 +24,12 @@ class ConversationState(StrEnum):
     TICKET_CREATED = "ticket_created"
     WAITING_CUSTOMER = "waiting_customer"
     WAITING_ATTENDANT = "waiting_attendant"
+    WAITING_EQUIPMENT = "waiting_equipment"
+    WAITING_PROBLEM = "waiting_problem"
+    WAITING_DATE = "waiting_date"
+    WAITING_SYMPTOMS = "waiting_symptoms"
+    WAITING_CONFIRMATION = "waiting_confirmation"
+    READY_FOR_ATTENDANT = "ready_for_attendant"
     RESOLVED = "resolved"
     CLOSED = "closed"
 

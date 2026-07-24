@@ -42,9 +42,12 @@ def meta_payload(message_type: str = "text", message_id: str = "wamid.1", text: 
 class FakeDb:
     def __init__(self, scalar_result=None):
         self.scalar_result = scalar_result
+        self.scalar_results = []
         self.objects = []
 
     def scalar(self, stmt):
+        if self.scalar_results:
+            return self.scalar_results.pop(0)
         return self.scalar_result
 
     def add(self, obj):
@@ -63,6 +66,25 @@ class FakeDb:
             if isinstance(obj, model) and getattr(obj, "id", None) == item_id:
                 return obj
         return None
+
+
+def first_object(db: FakeDb, model, **attrs):
+    for obj in db.objects:
+        if isinstance(obj, model) and all(getattr(obj, key) == value for key, value in attrs.items()):
+            return obj
+    raise AssertionError(f"{model.__name__} not found")
+
+
+async def continue_whatsapp_conversation(db: FakeDb, tenant_id, text: str, message_id: str, provider=None):
+    contact = first_object(db, Contact)
+    session = first_object(db, ConversationSession)
+    db.scalar_results = [None, contact, session]
+    return await webhook_service.process_messages_and_send_initial_response(
+        db,
+        tenant_id,
+        normalize_meta_webhook(meta_payload(message_id=message_id, text=text)),
+        provider or MockMessagingProvider(),
+    )
 
 
 def test_meta_webhook_verification_valid(monkeypatch):
@@ -173,6 +195,7 @@ def test_process_text_message_creates_contact_session_ticket(monkeypatch):
     assert any(isinstance(obj, Customer) for obj in db.objects)
     assert any(isinstance(obj, Ticket) for obj in db.objects)
     assert any(isinstance(obj, MessagingMessage) for obj in db.objects)
+    assert first_object(db, ConversationSession).current_state == "waiting_equipment"
 
 
 def test_duplicate_message_is_not_processed_twice():
@@ -221,6 +244,7 @@ async def test_new_message_generates_automatic_response_with_protocol(monkeypatc
     assert len(outbound) == 1
     assert "PT-2026-000777" in outbound[0].text_content
     assert "Olá, Maria Cliente" in outbound[0].text_content
+    assert first_object(db, ConversationSession).current_state == "waiting_equipment"
 
 
 @pytest.mark.asyncio
@@ -303,3 +327,149 @@ async def test_inbound_and_outbound_are_linked_to_same_ticket_and_session(monkey
     assert outbound.session_id == inbound.session_id
     assert outbound.contact_id == inbound.contact_id
     assert outbound.customer_id == inbound.customer_id
+
+
+@pytest.mark.asyncio
+async def test_second_message_saves_equipment_and_moves_to_waiting_problem(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PT-2026-001001")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+
+    await continue_whatsapp_conversation(db, tenant_id, "Dell Inspiron 3501", "wamid.2")
+
+    session = first_object(db, ConversationSession)
+    ticket = first_object(db, Ticket)
+    assert session.current_state == "waiting_problem"
+    assert session.collected_data["equipment"] == "Dell Inspiron 3501"
+    assert ticket.module == "Dell Inspiron 3501"
+
+
+@pytest.mark.asyncio
+async def test_third_message_saves_problem_and_moves_to_waiting_date(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PT-2026-001002")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+    await continue_whatsapp_conversation(db, tenant_id, "Dell Inspiron 3501", "wamid.2")
+
+    await continue_whatsapp_conversation(db, tenant_id, "Não liga", "wamid.3")
+
+    session = first_object(db, ConversationSession)
+    ticket = first_object(db, Ticket)
+    assert session.current_state == "waiting_date"
+    assert session.collected_data["problem"] == "Não liga"
+    assert ticket.description == "Não liga"
+
+
+@pytest.mark.asyncio
+async def test_fourth_message_saves_problem_start_and_moves_to_waiting_symptoms(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PT-2026-001003")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+    await continue_whatsapp_conversation(db, tenant_id, "Dell Inspiron 3501", "wamid.2")
+    await continue_whatsapp_conversation(db, tenant_id, "Não liga", "wamid.3")
+
+    await continue_whatsapp_conversation(db, tenant_id, "Hoje pela manhã", "wamid.4")
+
+    session = first_object(db, ConversationSession)
+    assert session.current_state == "waiting_symptoms"
+    assert session.collected_data["problem_started_at_text"] == "Hoje pela manhã"
+
+
+@pytest.mark.asyncio
+async def test_fifth_message_saves_symptoms_and_generates_summary(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-001004")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+    await continue_whatsapp_conversation(db, tenant_id, "Dell Inspiron 3501", "wamid.2")
+    await continue_whatsapp_conversation(db, tenant_id, "Não liga", "wamid.3")
+    await continue_whatsapp_conversation(db, tenant_id, "Hoje pela manhã", "wamid.4")
+
+    await continue_whatsapp_conversation(db, tenant_id, "LED piscando", "wamid.5")
+
+    session = first_object(db, ConversationSession)
+    last_outbound = [obj for obj in db.objects if isinstance(obj, MessagingMessage) and obj.direction == "outbound"][-1]
+    assert session.current_state == "waiting_confirmation"
+    assert session.collected_data["symptoms"] == "LED piscando"
+    assert "Resumo da solicitação" in last_outbound.text_content
+    assert "PWT-2026-001004" in last_outbound.text_content
+
+
+@pytest.mark.asyncio
+async def test_confirmation_sim_moves_to_ready_for_attendant(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-001005")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+    await continue_whatsapp_conversation(db, tenant_id, "Dell Inspiron 3501", "wamid.2")
+    await continue_whatsapp_conversation(db, tenant_id, "Não liga", "wamid.3")
+    await continue_whatsapp_conversation(db, tenant_id, "Hoje pela manhã", "wamid.4")
+    await continue_whatsapp_conversation(db, tenant_id, "LED piscando", "wamid.5")
+
+    await continue_whatsapp_conversation(db, tenant_id, "SIM", "wamid.6")
+
+    session = first_object(db, ConversationSession)
+    ticket = first_object(db, Ticket)
+    last_outbound = [obj for obj in db.objects if isinstance(obj, MessagingMessage) and obj.direction == "outbound"][-1]
+    assert session.current_state == "ready_for_attendant"
+    assert ticket.status == "em_atendimento"
+    assert "atendimento humano" in last_outbound.text_content
+
+
+@pytest.mark.asyncio
+async def test_initial_greeting_does_not_repeat_and_all_messages_keep_same_ticket_and_session(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-001006")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+    first_session_id = first_object(db, ConversationSession).id
+    first_ticket_id = first_object(db, Ticket).id
+
+    await continue_whatsapp_conversation(db, tenant_id, "Dell Inspiron 3501", "wamid.2")
+    await continue_whatsapp_conversation(db, tenant_id, "Não liga", "wamid.3")
+
+    inbound_messages = [obj for obj in db.objects if isinstance(obj, MessagingMessage) and obj.direction == "inbound"]
+    outbound_messages = [obj for obj in db.objects if isinstance(obj, MessagingMessage) and obj.direction == "outbound"]
+    assert sum("Recebemos sua solicitação" in (msg.text_content or "") for msg in outbound_messages) == 1
+    assert {msg.session_id for msg in inbound_messages + outbound_messages} == {first_session_id}
+    assert {msg.ticket_id for msg in inbound_messages + outbound_messages} == {first_ticket_id}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_does_not_advance_state(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-001007")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+    session = first_object(db, ConversationSession)
+    existing = first_object(db, MessagingMessage, direction="inbound")
+    db.scalar_result = existing
+
+    result = await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload(message_id="wamid.1", text="Dell")), MockMessagingProvider())
+
+    assert result["duplicates"] == 1
+    assert session.current_state == "waiting_equipment"
+
+
+@pytest.mark.asyncio
+async def test_provider_failure_keeps_advanced_state(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-001008")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+
+    class FailingProvider:
+        provider_name = "mock"
+
+        async def send_text(self, recipient: str, text: str) -> dict:
+            raise RuntimeError("boom")
+
+    await continue_whatsapp_conversation(db, tenant_id, "Dell Inspiron 3501", "wamid.2", FailingProvider())
+
+    session = first_object(db, ConversationSession)
+    assert session.current_state == "waiting_problem"
+    assert session.collected_data["equipment"] == "Dell Inspiron 3501"
+    assert any(isinstance(obj, MessagingEvent) and obj.event_type == "automatic_response_failed" for obj in db.objects)
