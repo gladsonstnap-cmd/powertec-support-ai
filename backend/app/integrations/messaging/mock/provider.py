@@ -3,6 +3,8 @@ from app.integrations.messaging.mock.storage import MEDIA, record_outbound
 
 
 class MockMessagingProvider(MessagingProvider):
+    provider_name = "mock"
+
     async def send_text(self, recipient: str, text: str) -> dict:
         return record_outbound("text", recipient, {"text": text})
 

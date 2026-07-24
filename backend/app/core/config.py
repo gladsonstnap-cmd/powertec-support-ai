@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     backend_cors_origins: list[AnyHttpUrl] | str = "http://localhost:3000"
     whatsapp_provider: str = "mock"
+    whatsapp_access_token: str | None = None
+    whatsapp_api_version: str | None = None
+    whatsapp_app_secret: str | None = None
+    whatsapp_business_account_id: str | None = None
+    whatsapp_phone_number_id: str | None = None
+    whatsapp_verify_token: str = "change-me"
+    whatsapp_webhook_url: str | None = None
     whatsapp_max_media_size_mb: int = 20
     whatsapp_request_timeout_seconds: int = 30
     messaging_simulator_enabled: bool = True

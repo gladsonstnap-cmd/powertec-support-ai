@@ -223,7 +223,7 @@ class ConversationStateMachine:
             outbound = MessagingMessage(
                 tenant_id=session.tenant_id,
                 external_message_id=result["external_message_id"],
-                provider="mock",
+                provider=result.get("provider", getattr(self.provider, "provider_name", "mock")),
                 direction="outbound",
                 sender=source_message.recipient,
                 recipient=source_message.sender,
