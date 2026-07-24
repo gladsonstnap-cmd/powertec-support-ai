@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -473,3 +474,155 @@ async def test_provider_failure_keeps_advanced_state(monkeypatch):
     assert session.current_state == "waiting_problem"
     assert session.collected_data["equipment"] == "Dell Inspiron 3501"
     assert any(isinstance(obj, MessagingEvent) and obj.event_type == "automatic_response_failed" for obj in db.objects)
+
+
+@pytest.mark.asyncio
+async def test_cancel_command_closes_session_and_cancels_ticket(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-002001")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+
+    await continue_whatsapp_conversation(db, tenant_id, "cancelar", "wamid.cancel")
+
+    session = first_object(db, ConversationSession)
+    ticket = first_object(db, Ticket)
+    outbound = [obj for obj in db.objects if isinstance(obj, MessagingMessage) and obj.direction == "outbound"][-1]
+    assert session.current_state == "closed"
+    assert session.closed_at is not None
+    assert ticket.status == "cancelado"
+    assert "foi encerrada" in outbound.text_content
+    assert any(isinstance(obj, MessagingEvent) and obj.event_type == "conversation_closed" for obj in db.objects)
+
+
+@pytest.mark.asyncio
+async def test_restart_command_preserves_ticket_and_session(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-002002")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+    session = first_object(db, ConversationSession)
+    ticket = first_object(db, Ticket)
+    session.collected_data["equipment"] = "Notebook"
+
+    await continue_whatsapp_conversation(db, tenant_id, "reiniciar atendimento", "wamid.restart")
+
+    assert first_object(db, ConversationSession).id == session.id
+    assert first_object(db, Ticket).id == ticket.id
+    assert session.current_state == "waiting_equipment"
+    assert "equipment" not in session.collected_data
+    assert any(isinstance(obj, MessagingEvent) and obj.event_type == "conversation_restarted" for obj in db.objects)
+
+
+@pytest.mark.asyncio
+async def test_attendant_command_forwards_conversation(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-002003")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+
+    await continue_whatsapp_conversation(db, tenant_id, "atendente", "wamid.human")
+
+    session = first_object(db, ConversationSession)
+    ticket = first_object(db, Ticket)
+    outbound = [obj for obj in db.objects if isinstance(obj, MessagingMessage) and obj.direction == "outbound"][-1]
+    assert session.current_state == "ready_for_attendant"
+    assert ticket.status == "em_atendimento"
+    assert "equipe técnica" in outbound.text_content
+    assert any(isinstance(obj, MessagingEvent) and obj.event_type == "conversation_forwarded" for obj in db.objects)
+
+
+@pytest.mark.asyncio
+async def test_status_command_returns_protocol_state_priority_and_elapsed_time(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-002004")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+
+    await continue_whatsapp_conversation(db, tenant_id, "status", "wamid.status")
+
+    outbound = [obj for obj in db.objects if isinstance(obj, MessagingMessage) and obj.direction == "outbound"][-1]
+    assert "PWT-2026-002004" in outbound.text_content
+    assert "Estado atual" in outbound.text_content
+    assert "Prioridade" in outbound.text_content
+    assert "Tempo em atendimento" in outbound.text_content
+    assert any(isinstance(obj, MessagingEvent) and obj.event_type == "status_requested" for obj in db.objects)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("command", "expected_state"),
+    [
+        ("corrigir equipamento", "waiting_equipment"),
+        ("corrigir problema", "waiting_problem"),
+        ("corrigir sintomas", "waiting_symptoms"),
+        ("corrigir data", "waiting_date"),
+    ],
+)
+async def test_correction_commands_move_to_expected_state(monkeypatch, command, expected_state):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-002005")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+    await continue_whatsapp_conversation(db, tenant_id, "Dell Inspiron 3501", "wamid.2")
+    await continue_whatsapp_conversation(db, tenant_id, "Não liga", "wamid.3")
+
+    await continue_whatsapp_conversation(db, tenant_id, command, f"wamid.{command}")
+
+    session = first_object(db, ConversationSession)
+    assert session.current_state == expected_state
+    assert any(isinstance(obj, MessagingEvent) and obj.event_type == "customer_corrected_information" for obj in db.objects)
+
+
+@pytest.mark.asyncio
+async def test_summary_is_updated_incrementally(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-002006")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+
+    await continue_whatsapp_conversation(db, tenant_id, "Notebook Dell", "wamid.equipment")
+    await continue_whatsapp_conversation(db, tenant_id, "Não liga", "wamid.problem")
+
+    session = first_object(db, ConversationSession)
+    assert "Notebook Dell" in session.collected_data["conversation_summary"]
+    assert "Não liga" in session.collected_data["conversation_summary"]
+    assert any(isinstance(obj, MessagingEvent) and obj.event_type == "summary_updated" for obj in db.objects)
+
+
+@pytest.mark.asyncio
+async def test_timeout_marks_waiting_customer_and_sends_pause_message(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-002007")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+    session = first_object(db, ConversationSession)
+    session.updated_at = webhook_service.datetime.now(webhook_service.UTC) - timedelta(minutes=90)
+
+    await continue_whatsapp_conversation(db, tenant_id, "Ainda estou aqui", "wamid.timeout")
+
+    outbound = [obj for obj in db.objects if isinstance(obj, MessagingMessage) and obj.direction == "outbound"][-1]
+    assert webhook_service.is_session_expired(session, webhook_service.datetime.now(webhook_service.UTC), timeout_minutes=60) is False
+    assert session.current_state == "waiting_customer"
+    assert "ficou pausado" in outbound.text_content
+
+
+@pytest.mark.asyncio
+async def test_outbound_for_global_command_keeps_required_links(monkeypatch):
+    monkeypatch.setattr(webhook_service, "generate_protocol", lambda db, tenant_id: "PWT-2026-002008")
+    db = FakeDb()
+    tenant_id = uuid4()
+    await webhook_service.process_messages_and_send_initial_response(db, tenant_id, normalize_meta_webhook(meta_payload()), MockMessagingProvider())
+
+    await continue_whatsapp_conversation(db, tenant_id, "status", "wamid.status.links")
+
+    inbound = [obj for obj in db.objects if isinstance(obj, MessagingMessage) and obj.direction == "inbound"][-1]
+    outbound = [obj for obj in db.objects if isinstance(obj, MessagingMessage) and obj.direction == "outbound"][-1]
+    assert outbound.ticket_id == inbound.ticket_id
+    assert outbound.session_id == inbound.session_id
+    assert outbound.contact_id == inbound.contact_id
+    assert outbound.customer_id == inbound.customer_id
+    assert outbound.recipient == inbound.sender
+    assert outbound.provider == "mock"
+    assert outbound.external_message_id
+    assert outbound.status == "sent"

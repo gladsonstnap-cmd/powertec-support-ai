@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -121,6 +121,24 @@ def _ensure_ticket(db: Session, tenant_id, session: ConversationSession, contact
     return ticket
 
 
+def register_event(
+    db: Session,
+    tenant_id,
+    provider: str,
+    event_type: str,
+    payload: dict,
+) -> None:
+    db.add(
+        MessagingEvent(
+            tenant_id=tenant_id,
+            provider=provider,
+            event_type=event_type,
+            payload=payload,
+            created_at=datetime.now(UTC),
+        )
+    )
+
+
 def build_initial_response(contact_name: str | None, protocol: str) -> str:
     if contact_name:
         greeting = f"Olá, {contact_name}. Recebemos sua solicitação na PowerTec."
@@ -151,6 +169,23 @@ def build_ticket_summary(data: dict, protocol: str) -> str:
     )
 
 
+def update_summary(session: ConversationSession) -> str:
+    data = dict(session.collected_data or {})
+    lines = []
+    if data.get("equipment"):
+        lines.append(f"Equipamento:\n{sanitize_text(data.get('equipment'))}")
+    if data.get("problem"):
+        lines.append(f"Problema:\n{sanitize_text(data.get('problem'))}")
+    if data.get("problem_started_at_text"):
+        lines.append(f"Início:\n{sanitize_text(data.get('problem_started_at_text'))}")
+    if data.get("symptoms"):
+        lines.append(f"Sintomas:\n{sanitize_text(data.get('symptoms'))}")
+    summary = "\n\n".join(lines)
+    data["conversation_summary"] = summary
+    session.collected_data = data
+    return summary
+
+
 def apply_collected_data_to_ticket(ticket: Ticket, data: dict) -> None:
     equipment = sanitize_text(data.get("equipment"))
     problem = sanitize_text(data.get("problem"))
@@ -173,45 +208,162 @@ def apply_collected_data_to_ticket(ticket: Ticket, data: dict) -> None:
         ticket.ai_summary = "Triagem determinística via WhatsApp.\n" + "\n".join(details)
 
 
-def handle_conversation_state(session: ConversationSession, ticket: Ticket, inbound_text: str, is_new_session: bool, contact_name: str | None) -> str:
+def _change_state(db: Session, tenant_id, provider: str, session: ConversationSession, new_state: ConversationState, reason: str) -> None:
+    previous = session.current_state
+    session.current_state = new_state.value
+    if previous != new_state.value:
+        register_event(
+            db,
+            tenant_id,
+            provider,
+            "state_changed",
+            {"from_state": previous, "to_state": new_state.value, "reason": reason, "session_id": str(session.id)},
+        )
+
+
+def close_session(db: Session, tenant_id, provider: str, session: ConversationSession, ticket: Ticket) -> str:
+    _change_state(db, tenant_id, provider, session, ConversationState.CLOSED, "customer_cancelled")
+    session.closed_at = datetime.now(UTC)
+    ticket.status = TicketStatus.CANCELED.value
+    register_event(db, tenant_id, provider, "conversation_closed", {"session_id": str(session.id), "ticket_id": str(ticket.id), "protocol": ticket.protocol})
+    return f"Sua solicitação foi encerrada.\n\nCaso precise novamente, basta enviar uma nova mensagem.\n\nProtocolo:\n{ticket.protocol}"
+
+
+def restart_session(db: Session, tenant_id, provider: str, session: ConversationSession, ticket: Ticket, contact_name: str | None) -> str:
+    session.collected_data = {"source": "whatsapp_cloud_api", "conversation_restarted_at": datetime.now(UTC).isoformat()}
+    session.protocol = ticket.protocol
+    _change_state(db, tenant_id, provider, session, ConversationState.WAITING_EQUIPMENT, "customer_restarted")
+    register_event(db, tenant_id, provider, "conversation_restarted", {"session_id": str(session.id), "ticket_id": str(ticket.id), "protocol": ticket.protocol})
+    return build_initial_response(contact_name, ticket.protocol)
+
+
+def forward_to_attendant(db: Session, tenant_id, provider: str, session: ConversationSession, ticket: Ticket) -> str:
+    _change_state(db, tenant_id, provider, session, ConversationState.READY_FOR_ATTENDANT, "customer_requested_human")
+    ticket.status = TicketStatus.IN_SERVICE.value
+    register_event(db, tenant_id, provider, "conversation_forwarded", {"session_id": str(session.id), "ticket_id": str(ticket.id), "protocol": ticket.protocol})
+    return f"Seu atendimento foi encaminhado para nossa equipe técnica.\n\nProtocolo:\n{ticket.protocol}"
+
+
+def handle_status(db: Session, tenant_id, provider: str, session: ConversationSession, ticket: Ticket) -> str:
+    now = datetime.now(UTC)
+    opened_at = ticket.opened_at
+    elapsed = now - opened_at if opened_at else timedelta()
+    register_event(db, tenant_id, provider, "status_requested", {"session_id": str(session.id), "ticket_id": str(ticket.id), "protocol": ticket.protocol})
+    return (
+        f"Protocolo: {ticket.protocol}\n"
+        f"Estado atual: {session.current_state}\n"
+        f"Prioridade: {ticket.priority}\n"
+        f"Data abertura: {opened_at.isoformat() if opened_at else '-'}\n"
+        f"Tempo em atendimento: {int(elapsed.total_seconds() // 60)} minutos"
+    )
+
+
+def handle_correction(db: Session, tenant_id, provider: str, session: ConversationSession, text: str) -> str | None:
+    normalized = text.strip().lower()
+    mapping = {
+        "corrigir equipamento": (ConversationState.WAITING_EQUIPMENT, "Informe novamente qual é o equipamento."),
+        "corrigir problema": (ConversationState.WAITING_PROBLEM, "Descreva novamente qual problema o equipamento apresenta."),
+        "corrigir início": (ConversationState.WAITING_DATE, "Informe novamente quando o problema começou."),
+        "corrigir inicio": (ConversationState.WAITING_DATE, "Informe novamente quando o problema começou."),
+        "corrigir data": (ConversationState.WAITING_DATE, "Informe novamente quando o problema começou."),
+        "corrigir sintomas": (ConversationState.WAITING_SYMPTOMS, "Informe novamente os sinais observados."),
+    }
+    if normalized not in mapping:
+        return None
+    state, response = mapping[normalized]
+    _change_state(db, tenant_id, provider, session, state, "customer_corrected_information")
+    register_event(db, tenant_id, provider, "customer_corrected_information", {"session_id": str(session.id), "field": normalized.replace("corrigir ", "")})
+    return response
+
+
+def handle_global_commands(db: Session, tenant_id, provider: str, session: ConversationSession, ticket: Ticket, text: str, contact_name: str | None) -> str | None:
+    normalized = text.strip().lower()
+    if normalized in {"cancelar", "cancelar atendimento", "encerrar"}:
+        return close_session(db, tenant_id, provider, session, ticket)
+    if normalized in {"reiniciar", "reiniciar atendimento", "novo atendimento"}:
+        return restart_session(db, tenant_id, provider, session, ticket, contact_name)
+    if normalized in {"atendente", "humano", "falar com atendente"}:
+        return forward_to_attendant(db, tenant_id, provider, session, ticket)
+    if normalized == "status":
+        return handle_status(db, tenant_id, provider, session, ticket)
+    return handle_correction(db, tenant_id, provider, session, normalized)
+
+
+def is_session_expired(session: ConversationSession, now: datetime | None = None, timeout_minutes: int = 60) -> bool:
+    if session.closed_at or not session.updated_at:
+        return False
+    current_time = now or datetime.now(UTC)
+    return current_time - session.updated_at > timedelta(minutes=timeout_minutes)
+
+
+def mark_waiting_customer(db: Session, tenant_id, provider: str, session: ConversationSession) -> str:
+    _change_state(db, tenant_id, provider, session, ConversationState.WAITING_CUSTOMER, "session_timeout")
+    return "Seu atendimento ficou pausado.\n\nCaso deseje continuar basta responder esta mensagem."
+
+
+def resume_session(db: Session, tenant_id, provider: str, session: ConversationSession) -> None:
+    if session.current_state == ConversationState.WAITING_CUSTOMER.value:
+        _change_state(db, tenant_id, provider, session, ConversationState.WAITING_EQUIPMENT, "customer_resumed")
+
+
+def handle_conversation_state(
+    db: Session,
+    tenant_id,
+    provider: str,
+    session: ConversationSession,
+    ticket: Ticket,
+    inbound_text: str,
+    is_new_session: bool,
+    contact_name: str | None,
+) -> str:
     data = dict(session.collected_data or {})
     text = sanitize_text(inbound_text)
     if is_new_session:
-        session.current_state = ConversationState.WAITING_EQUIPMENT.value
+        _change_state(db, tenant_id, provider, session, ConversationState.WAITING_EQUIPMENT, "new_whatsapp_session")
         session.collected_data = data
         apply_collected_data_to_ticket(ticket, data)
         return build_initial_response(contact_name, ticket.protocol)
 
+    command_response = handle_global_commands(db, tenant_id, provider, session, ticket, text, contact_name)
+    if command_response:
+        return command_response
+    if is_session_expired(session):
+        return mark_waiting_customer(db, tenant_id, provider, session)
+    if session.current_state == ConversationState.WAITING_CUSTOMER.value:
+        resume_session(db, tenant_id, provider, session)
+
     current_state = ConversationState(session.current_state)
     if current_state == ConversationState.WAITING_EQUIPMENT:
         data["equipment"] = text
-        session.current_state = ConversationState.WAITING_PROBLEM.value
+        _change_state(db, tenant_id, provider, session, ConversationState.WAITING_PROBLEM, "equipment_collected")
         response = "Qual problema o equipamento apresenta?"
     elif current_state == ConversationState.WAITING_PROBLEM:
         data["problem"] = text
-        session.current_state = ConversationState.WAITING_DATE.value
+        _change_state(db, tenant_id, provider, session, ConversationState.WAITING_DATE, "problem_collected")
         response = "Quando o problema começou?"
     elif current_state == ConversationState.WAITING_DATE:
         data["problem_started_at_text"] = text
-        session.current_state = ConversationState.WAITING_SYMPTOMS.value
+        _change_state(db, tenant_id, provider, session, ConversationState.WAITING_SYMPTOMS, "problem_start_collected")
         response = "Existe algum sinal visível, como LED aceso, bip, tela, barulho ou cheiro de queimado?"
     elif current_state == ConversationState.WAITING_SYMPTOMS:
         data["symptoms"] = text
-        session.current_state = ConversationState.WAITING_CONFIRMATION.value
+        _change_state(db, tenant_id, provider, session, ConversationState.WAITING_CONFIRMATION, "symptoms_collected")
         response = build_ticket_summary(data, ticket.protocol)
     elif current_state == ConversationState.WAITING_CONFIRMATION:
         if text.strip().lower() == "sim":
-            session.current_state = ConversationState.READY_FOR_ATTENDANT.value
+            _change_state(db, tenant_id, provider, session, ConversationState.READY_FOR_ATTENDANT, "customer_confirmed_summary")
             ticket.status = TicketStatus.IN_SERVICE.value
             response = f"Solicitação confirmada e encaminhada para atendimento humano.\n\nProtocolo: {ticket.protocol}"
         else:
             data["correction_request"] = text
-            session.current_state = ConversationState.WAITING_PROBLEM.value
+            _change_state(db, tenant_id, provider, session, ConversationState.WAITING_PROBLEM, "customer_requested_correction")
             response = "Qual informação deseja corrigir? Descreva o problema atualizado."
     else:
         response = f"Recebemos sua atualização no protocolo {ticket.protocol}. A solicitação permanece em atendimento."
     session.collected_data = data
     apply_collected_data_to_ticket(ticket, data)
+    update_summary(session)
+    register_event(db, tenant_id, provider, "summary_updated", {"session_id": str(session.id), "summary": session.collected_data.get("conversation_summary", "")})
     return response
 
 
@@ -247,7 +399,7 @@ def process_normalized_messages(db: Session, tenant_id, messages: list[Normalize
         contact = _get_or_create_contact(db, tenant_id, message)
         session, is_new_session = _get_or_create_session(db, tenant_id, contact, message)
         ticket = _ensure_ticket(db, tenant_id, session, contact, message)
-        response_text = handle_conversation_state(session, ticket, valid_text, is_new_session, contact.name)
+        response_text = handle_conversation_state(db, tenant_id, message.provider, session, ticket, valid_text, is_new_session, contact.name)
         inbound = MessagingMessage(
             tenant_id=tenant_id,
             external_message_id=message.external_message_id,
