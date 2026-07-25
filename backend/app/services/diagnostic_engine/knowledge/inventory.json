@@ -1,0 +1,240 @@
+{
+  "incidents": [
+    {
+      "id": "inventory_balance_incorrect",
+      "title": "Saldo de estoque incorreto",
+      "description": "Base deterministica para diagnosticar: saldo de estoque incorreto.",
+      "category": "INVENTORY",
+      "default_severity": "MEDIUM",
+      "symptoms": [
+        "estoque incorreto",
+        "saldo errado"
+      ],
+      "possible_causes": [
+        {
+          "id": "inventory_balance_incorrect_cause_primary",
+          "description": "Movimentacao pendente de sincronizacao",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "estoque incorreto",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "inventory_balance_incorrect_cause_secondary",
+          "description": "Lancamento manual divergente",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "saldo errado"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "inventory_balance_incorrect_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "inventory_balance_incorrect_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "inventory_balance_incorrect_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "inventory_balance_incorrect_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "inventory_balance_incorrect_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "LOW",
+          "requires_approval": false,
+          "requires_human": false
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": false,
+      "tags": [
+        "estoque",
+        "saldo"
+      ]
+    },
+    {
+      "id": "inventory_movement_not_registered",
+      "title": "Movimento de estoque nao registrado",
+      "description": "Base deterministica para diagnosticar: movimento de estoque nao registrado.",
+      "category": "INVENTORY",
+      "default_severity": "MEDIUM",
+      "symptoms": [
+        "entrada nao atualiza estoque",
+        "saida nao baixou estoque"
+      ],
+      "possible_causes": [
+        {
+          "id": "inventory_movement_not_registered_cause_primary",
+          "description": "Documento pendente de processamento",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "entrada nao atualiza estoque",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "inventory_movement_not_registered_cause_secondary",
+          "description": "Produto sem vinculacao correta",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "saida nao baixou estoque"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "inventory_movement_not_registered_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "inventory_movement_not_registered_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "inventory_movement_not_registered_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "inventory_movement_not_registered_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "inventory_movement_not_registered_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "LOW",
+          "requires_approval": false,
+          "requires_human": false
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": false,
+      "tags": [
+        "estoque",
+        "movimento"
+      ]
+    }
+  ]
+}

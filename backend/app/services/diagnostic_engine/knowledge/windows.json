@@ -1,0 +1,241 @@
+{
+  "incidents": [
+    {
+      "id": "windows_spooler_stopped",
+      "title": "Spooler do Windows parado",
+      "description": "Base deterministica para diagnosticar: spooler do windows parado.",
+      "category": "WINDOWS",
+      "default_severity": "MEDIUM",
+      "symptoms": [
+        "spooler parado",
+        "impressao nao sai no windows"
+      ],
+      "possible_causes": [
+        {
+          "id": "windows_spooler_stopped_cause_primary",
+          "description": "Servico de spooler interrompido",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "spooler parado",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "windows_spooler_stopped_cause_secondary",
+          "description": "Driver travado no Windows",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "impressao nao sai no windows"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "windows_spooler_stopped_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "windows_spooler_stopped_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "windows_spooler_stopped_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "windows_spooler_stopped_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "windows_spooler_stopped_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "LOW",
+          "requires_approval": false,
+          "requires_human": false
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": false,
+      "tags": [
+        "windows",
+        "spooler",
+        "impressao"
+      ]
+    },
+    {
+      "id": "windows_permission_folder_issue",
+      "title": "Permissao de pasta no Windows",
+      "description": "Base deterministica para diagnosticar: permissao de pasta no windows.",
+      "category": "WINDOWS",
+      "default_severity": "MEDIUM",
+      "symptoms": [
+        "sem permissao na pasta",
+        "acesso negado"
+      ],
+      "possible_causes": [
+        {
+          "id": "windows_permission_folder_issue_cause_primary",
+          "description": "Permissao local insuficiente",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "sem permissao na pasta",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "windows_permission_folder_issue_cause_secondary",
+          "description": "Antivirus bloqueando escrita",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "acesso negado"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "windows_permission_folder_issue_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "windows_permission_folder_issue_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "windows_permission_folder_issue_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "windows_permission_folder_issue_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "windows_permission_folder_issue_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "LOW",
+          "requires_approval": false,
+          "requires_human": false
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": false,
+      "tags": [
+        "windows",
+        "permissao"
+      ]
+    }
+  ]
+}

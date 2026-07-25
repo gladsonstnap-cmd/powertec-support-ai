@@ -1,0 +1,241 @@
+{
+  "incidents": [
+    {
+      "id": "workstation_cannot_reach_server",
+      "title": "Terminal nao alcanca servidor",
+      "description": "Base deterministica para diagnosticar: terminal nao alcanca servidor.",
+      "category": "NETWORK",
+      "default_severity": "HIGH",
+      "symptoms": [
+        "sem rede no caixa",
+        "terminal nao pinga servidor"
+      ],
+      "possible_causes": [
+        {
+          "id": "workstation_cannot_reach_server_cause_primary",
+          "description": "Cabo ou Wi-Fi indisponivel",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "sem rede no caixa",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Acesso local ao servidor confirmado"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "workstation_cannot_reach_server_cause_secondary",
+          "description": "Configuracao de IP incorreta",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "terminal nao pinga servidor"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "workstation_cannot_reach_server_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "workstation_cannot_reach_server_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "workstation_cannot_reach_server_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "workstation_cannot_reach_server_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "workstation_cannot_reach_server_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "LOW",
+          "requires_approval": false,
+          "requires_human": false
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": false,
+      "tags": [
+        "rede",
+        "terminal",
+        "servidor"
+      ]
+    },
+    {
+      "id": "all_terminals_cannot_reach_server",
+      "title": "Todos os terminais sem acesso ao servidor",
+      "description": "Base deterministica para diagnosticar: todos os terminais sem acesso ao servidor.",
+      "category": "NETWORK",
+      "default_severity": "CRITICAL",
+      "symptoms": [
+        "todos sem rede",
+        "nenhum caixa acessa servidor"
+      ],
+      "possible_causes": [
+        {
+          "id": "all_terminals_cannot_reach_server_cause_primary",
+          "description": "Switch ou roteador indisponivel",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "todos sem rede",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Acesso local ao servidor confirmado"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "all_terminals_cannot_reach_server_cause_secondary",
+          "description": "Servidor fora da rede",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "nenhum caixa acessa servidor"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "all_terminals_cannot_reach_server_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "all_terminals_cannot_reach_server_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "all_terminals_cannot_reach_server_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "all_terminals_cannot_reach_server_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "all_terminals_cannot_reach_server_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "HIGH",
+          "requires_approval": true,
+          "requires_human": true
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": true,
+      "tags": [
+        "rede",
+        "todos terminais"
+      ]
+    }
+  ]
+}

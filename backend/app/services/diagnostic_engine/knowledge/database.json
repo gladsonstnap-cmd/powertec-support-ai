@@ -1,0 +1,479 @@
+{
+  "incidents": [
+    {
+      "id": "database_service_stopped",
+      "title": "Servico do banco parado",
+      "description": "Base deterministica para diagnosticar: servico do banco parado.",
+      "category": "DATABASE",
+      "default_severity": "CRITICAL",
+      "symptoms": [
+        "banco parado",
+        "sem conexao com banco"
+      ],
+      "possible_causes": [
+        {
+          "id": "database_service_stopped_cause_primary",
+          "description": "Servico do banco de dados interrompido",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "banco parado",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "database_service_stopped_cause_secondary",
+          "description": "Falha de inicializacao do servico",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "sem conexao com banco"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "database_service_stopped_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "database_service_stopped_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "database_service_stopped_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "database_service_stopped_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "database_service_stopped_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "HIGH",
+          "requires_approval": true,
+          "requires_human": true
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": true,
+      "tags": [
+        "banco",
+        "servico",
+        "postgres"
+      ]
+    },
+    {
+      "id": "database_connection_refused",
+      "title": "Conexao recusada pelo banco",
+      "description": "Base deterministica para diagnosticar: conexao recusada pelo banco.",
+      "category": "DATABASE",
+      "default_severity": "CRITICAL",
+      "symptoms": [
+        "connection refused",
+        "pdv nao conecta no banco"
+      ],
+      "possible_causes": [
+        {
+          "id": "database_connection_refused_cause_primary",
+          "description": "Porta do banco indisponivel",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "connection refused",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "database_connection_refused_cause_secondary",
+          "description": "Limite de conexoes atingido",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "pdv nao conecta no banco"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "database_connection_refused_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "database_connection_refused_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "database_connection_refused_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "database_connection_refused_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "database_connection_refused_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "HIGH",
+          "requires_approval": true,
+          "requires_human": true
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": true,
+      "tags": [
+        "banco",
+        "conexao recusada"
+      ]
+    },
+    {
+      "id": "database_timeout",
+      "title": "Timeout ao consultar banco",
+      "description": "Base deterministica para diagnosticar: timeout ao consultar banco.",
+      "category": "DATABASE",
+      "default_severity": "HIGH",
+      "symptoms": [
+        "consulta lenta",
+        "timeout no banco"
+      ],
+      "possible_causes": [
+        {
+          "id": "database_timeout_cause_primary",
+          "description": "Bloqueio de tabela ou consulta longa",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "consulta lenta",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "database_timeout_cause_secondary",
+          "description": "Rede instavel entre terminal e servidor",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "timeout no banco"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "database_timeout_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "database_timeout_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "database_timeout_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "database_timeout_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "database_timeout_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "LOW",
+          "requires_approval": false,
+          "requires_human": false
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": false,
+      "tags": [
+        "banco",
+        "timeout",
+        "lentidao"
+      ]
+    },
+    {
+      "id": "database_possible_corruption",
+      "title": "Suspeita de corrupcao no banco",
+      "description": "Base deterministica para diagnosticar: suspeita de corrupcao no banco.",
+      "category": "DATABASE",
+      "default_severity": "CRITICAL",
+      "symptoms": [
+        "erro de integridade",
+        "dados inconsistentes"
+      ],
+      "possible_causes": [
+        {
+          "id": "database_possible_corruption_cause_primary",
+          "description": "Indice ou tabela com inconsistencia",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "erro de integridade",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "database_possible_corruption_cause_secondary",
+          "description": "Desligamento indevido durante gravacao",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "dados inconsistentes"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "database_possible_corruption_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "database_possible_corruption_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "database_possible_corruption_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "database_possible_corruption_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "database_possible_corruption_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "HIGH",
+          "requires_approval": true,
+          "requires_human": true
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": true,
+      "tags": [
+        "banco",
+        "corrupcao",
+        "integridade"
+      ]
+    }
+  ]
+}

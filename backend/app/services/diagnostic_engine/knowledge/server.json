@@ -1,0 +1,240 @@
+{
+  "incidents": [
+    {
+      "id": "server_offline",
+      "title": "Servidor offline",
+      "description": "Base deterministica para diagnosticar: servidor offline.",
+      "category": "SERVER",
+      "default_severity": "CRITICAL",
+      "symptoms": [
+        "servidor offline",
+        "todos os caixas parados"
+      ],
+      "possible_causes": [
+        {
+          "id": "server_offline_cause_primary",
+          "description": "Servidor desligado ou sem sistema operacional ativo",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "servidor offline",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Acesso local ao servidor confirmado"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "server_offline_cause_secondary",
+          "description": "Servico principal indisponivel",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "todos os caixas parados"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "server_offline_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "server_offline_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "server_offline_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "server_offline_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "server_offline_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "HIGH",
+          "requires_approval": true,
+          "requires_human": true
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": true,
+      "tags": [
+        "servidor",
+        "offline"
+      ]
+    },
+    {
+      "id": "server_service_unavailable",
+      "title": "Servico principal indisponivel",
+      "description": "Base deterministica para diagnosticar: servico principal indisponivel.",
+      "category": "SERVER",
+      "default_severity": "HIGH",
+      "symptoms": [
+        "servico fora do ar",
+        "aplicacao nao responde"
+      ],
+      "possible_causes": [
+        {
+          "id": "server_service_unavailable_cause_primary",
+          "description": "Servico do backend parado",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "servico fora do ar",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Acesso local ao servidor confirmado"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "server_service_unavailable_cause_secondary",
+          "description": "Recurso do servidor esgotado",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "aplicacao nao responde"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "server_service_unavailable_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "server_service_unavailable_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "server_service_unavailable_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "server_service_unavailable_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "server_service_unavailable_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "LOW",
+          "requires_approval": false,
+          "requires_human": false
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": false,
+      "tags": [
+        "servidor",
+        "servico"
+      ]
+    }
+  ]
+}

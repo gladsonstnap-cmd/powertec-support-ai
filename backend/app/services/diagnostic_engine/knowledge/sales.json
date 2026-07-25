@@ -1,0 +1,240 @@
+{
+  "incidents": [
+    {
+      "id": "sale_cannot_be_completed",
+      "title": "Venda nao finaliza",
+      "description": "Base deterministica para diagnosticar: venda nao finaliza.",
+      "category": "SALES",
+      "default_severity": "HIGH",
+      "symptoms": [
+        "venda nao finaliza",
+        "erro ao vender"
+      ],
+      "possible_causes": [
+        {
+          "id": "sale_cannot_be_completed_cause_primary",
+          "description": "Produto ou pagamento inconsistente",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "venda nao finaliza",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "sale_cannot_be_completed_cause_secondary",
+          "description": "Falha de comunicacao fiscal",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "erro ao vender"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "sale_cannot_be_completed_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "sale_cannot_be_completed_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "sale_cannot_be_completed_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "sale_cannot_be_completed_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "sale_cannot_be_completed_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "LOW",
+          "requires_approval": false,
+          "requires_human": false
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": false,
+      "tags": [
+        "venda",
+        "finalizacao"
+      ]
+    },
+    {
+      "id": "duplicate_sale",
+      "title": "Venda duplicada",
+      "description": "Base deterministica para diagnosticar: venda duplicada.",
+      "category": "SALES",
+      "default_severity": "CRITICAL",
+      "symptoms": [
+        "venda duplicada",
+        "cupom duplicado"
+      ],
+      "possible_causes": [
+        {
+          "id": "duplicate_sale_cause_primary",
+          "description": "Reprocessamento indevido de transacao",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "venda duplicada",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "duplicate_sale_cause_secondary",
+          "description": "Confirmacao fiscal repetida",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "cupom duplicado"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "duplicate_sale_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "duplicate_sale_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "duplicate_sale_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "duplicate_sale_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "duplicate_sale_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "HIGH",
+          "requires_approval": true,
+          "requires_human": true
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": true,
+      "tags": [
+        "venda",
+        "duplicada"
+      ]
+    }
+  ]
+}

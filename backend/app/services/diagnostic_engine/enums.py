@@ -46,6 +46,14 @@ class SeverityLevel(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class RiskLevel(StrEnum):
+    READ_ONLY = "READ_ONLY"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
 class ClassifierSource(StrEnum):
     RULE = "RULE"
     FALLBACK = "FALLBACK"

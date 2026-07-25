@@ -1,0 +1,240 @@
+{
+  "incidents": [
+    {
+      "id": "system_slow",
+      "title": "Sistema lento",
+      "description": "Base deterministica para diagnosticar: sistema lento.",
+      "category": "PERFORMANCE",
+      "default_severity": "MEDIUM",
+      "symptoms": [
+        "sistema lento",
+        "pdv demorando"
+      ],
+      "possible_causes": [
+        {
+          "id": "system_slow_cause_primary",
+          "description": "Recursos do terminal insuficientes",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "sistema lento",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "system_slow_cause_secondary",
+          "description": "Consulta ao banco demorando",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "pdv demorando"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "system_slow_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "system_slow_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "system_slow_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "system_slow_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "system_slow_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "LOW",
+          "requires_approval": false,
+          "requires_human": false
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": false,
+      "tags": [
+        "lentidao",
+        "performance"
+      ]
+    },
+    {
+      "id": "report_generation_slow",
+      "title": "Relatorio demora para gerar",
+      "description": "Base deterministica para diagnosticar: relatorio demora para gerar.",
+      "category": "PERFORMANCE",
+      "default_severity": "MEDIUM",
+      "symptoms": [
+        "relatorio lento",
+        "demora para gerar relatorio"
+      ],
+      "possible_causes": [
+        {
+          "id": "report_generation_slow_cause_primary",
+          "description": "Volume alto de dados",
+          "base_confidence": 0.64,
+          "supporting_evidence": [
+            "relatorio lento",
+            "Relato consistente do usuario"
+          ],
+          "contradicting_evidence": [
+            "Outros terminais funcionando normalmente"
+          ],
+          "risk_level": "READ_ONLY"
+        },
+        {
+          "id": "report_generation_slow_cause_secondary",
+          "description": "Filtro amplo sem periodo definido",
+          "base_confidence": 0.36,
+          "supporting_evidence": [
+            "demora para gerar relatorio"
+          ],
+          "contradicting_evidence": [
+            "Sem registros recentes relacionados"
+          ],
+          "risk_level": "READ_ONLY"
+        }
+      ],
+      "questions": [
+        {
+          "id": "report_generation_slow_q_scope",
+          "text": "O problema ocorre em um terminal ou em todos?",
+          "field": "affected_scope",
+          "priority": 10,
+          "answer_type": "single_choice",
+          "options": [
+            "um terminal",
+            "alguns terminais",
+            "todos"
+          ],
+          "required": true
+        },
+        {
+          "id": "report_generation_slow_q_start_time",
+          "text": "Quando o problema comecou?",
+          "field": "started_at",
+          "priority": 20,
+          "answer_type": "text",
+          "options": [],
+          "required": true
+        }
+      ],
+      "recommended_tests": [
+        {
+          "id": "report_generation_slow_test_collect_context",
+          "title": "Coletar contexto do ambiente",
+          "description": "Ler versao, terminal afetado, mensagens de erro e sinais operacionais sem alterar o ambiente.",
+          "tool_name": "read_environment_context",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Escopo identificado",
+            "Mensagem de erro registrada"
+          ]
+        },
+        {
+          "id": "report_generation_slow_test_check_logs",
+          "title": "Consultar logs relacionados",
+          "description": "Ler logs recentes do modulo afetado para confirmar sintomas e causa provavel.",
+          "tool_name": "read_recent_logs",
+          "risk_level": "READ_ONLY",
+          "requires_remote_agent": true,
+          "requires_approval": false,
+          "expected_results": [
+            "Eventos recentes encontrados",
+            "Ausencia de alteracao no sistema"
+          ]
+        }
+      ],
+      "recommended_actions": [
+        {
+          "id": "report_generation_slow_action_triage",
+          "title": "Orientar triagem segura",
+          "description": "Registrar evidencias, confirmar impacto e orientar proxima acao sem alterar dados de producao.",
+          "tool_name": "support_triage_guidance",
+          "risk_level": "LOW",
+          "requires_approval": false,
+          "requires_human": false
+        }
+      ],
+      "required_information": [
+        "terminal afetado",
+        "horario de inicio",
+        "mensagem de erro",
+        "sistema PDV"
+      ],
+      "escalation_conditions": [
+        "impacto em todos os caixas",
+        "risco de perda de venda",
+        "suspeita de corrupcao de dados"
+      ],
+      "requires_remote_diagnostic": true,
+      "requires_human": false,
+      "tags": [
+        "relatorio",
+        "lentidao"
+      ]
+    }
+  ]
+}
