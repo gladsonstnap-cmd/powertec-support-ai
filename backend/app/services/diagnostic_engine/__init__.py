@@ -4,6 +4,9 @@ from app.services.diagnostic_engine.evidence_engine import EvidenceEngine
 from app.services.diagnostic_engine.evidence_extractor import EvidenceExtractor
 from app.services.diagnostic_engine.evidence_models import Evidence, EvidencePolarity, EvidenceResult, EvidenceType, HypothesisUpdate
 from app.services.diagnostic_engine.evidence_scoring import EvidenceScorer
+from app.services.diagnostic_engine.decision_engine import DecisionEngine
+from app.services.diagnostic_engine.decision_models import Decision, DecisionInput, DecisionPriority, DecisionType
+from app.services.diagnostic_engine.decision_policy import DecisionPolicy
 from app.services.diagnostic_engine.intent_classifier import IntentClassifier
 from app.services.diagnostic_engine.incident_classifier import IncidentClassifier
 from app.services.diagnostic_engine.hypothesis_engine import HypothesisEngine
@@ -16,6 +19,12 @@ from app.services.diagnostic_engine.models import DiagnosticContext, IncidentCla
 
 __all__ = [
     "DiagnosticContext",
+    "Decision",
+    "DecisionEngine",
+    "DecisionInput",
+    "DecisionPolicy",
+    "DecisionPriority",
+    "DecisionType",
     "Evidence",
     "EvidenceEngine",
     "EvidenceExtractor",
