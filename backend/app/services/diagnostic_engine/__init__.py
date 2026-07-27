@@ -1,5 +1,9 @@
 """Deterministic diagnostic engine for PowerTec Support AI."""
 
+from app.services.diagnostic_engine.evidence_engine import EvidenceEngine
+from app.services.diagnostic_engine.evidence_extractor import EvidenceExtractor
+from app.services.diagnostic_engine.evidence_models import Evidence, EvidencePolarity, EvidenceResult, EvidenceType, HypothesisUpdate
+from app.services.diagnostic_engine.evidence_scoring import EvidenceScorer
 from app.services.diagnostic_engine.intent_classifier import IntentClassifier
 from app.services.diagnostic_engine.incident_classifier import IncidentClassifier
 from app.services.diagnostic_engine.hypothesis_engine import HypothesisEngine
@@ -12,10 +16,18 @@ from app.services.diagnostic_engine.models import DiagnosticContext, IncidentCla
 
 __all__ = [
     "DiagnosticContext",
-    "IncidentClassification",
-    "IncidentClassifier",
+    "Evidence",
+    "EvidenceEngine",
+    "EvidenceExtractor",
+    "EvidencePolarity",
+    "EvidenceResult",
+    "EvidenceScorer",
+    "EvidenceType",
     "Hypothesis",
     "HypothesisEngine",
+    "HypothesisUpdate",
+    "IncidentClassification",
+    "IncidentClassifier",
     "IntentClassification",
     "IntentClassifier",
     "KnowledgeBase",
