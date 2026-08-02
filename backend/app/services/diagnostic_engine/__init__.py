@@ -16,9 +16,12 @@ from app.services.diagnostic_engine.knowledge_loader import KnowledgeLoader
 from app.services.diagnostic_engine.knowledge_models import KnowledgeIncident, KnowledgeSearchResult, KnowledgeValidationError
 from app.services.diagnostic_engine.question_selector import QuestionSelector
 from app.services.diagnostic_engine.models import DiagnosticContext, IncidentClassification, IntentClassification
+from app.services.diagnostic_engine.workflow_engine import DiagnosticWorkflowEngine
+from app.services.diagnostic_engine.workflow_models import WorkflowResult, WorkflowStep
 
 __all__ = [
     "DiagnosticContext",
+    "DiagnosticWorkflowEngine",
     "Decision",
     "DecisionEngine",
     "DecisionInput",
@@ -45,4 +48,6 @@ __all__ = [
     "KnowledgeSearchResult",
     "KnowledgeValidationError",
     "QuestionSelector",
+    "WorkflowResult",
+    "WorkflowStep",
 ]
