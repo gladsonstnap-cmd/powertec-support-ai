@@ -23,6 +23,7 @@ from app.services.diagnostic_engine.session_models import DiagnosticSession, Dia
 from app.services.diagnostic_engine.session_policy import DiagnosticSessionPolicy
 from app.services.diagnostic_engine.conversation_engine import DiagnosticConversationEngine
 from app.services.diagnostic_engine.conversation_models import ConversationCommand, ConversationInput, ConversationResponse
+from app.services.diagnostic_engine.memory_models import MemoryEntry, MemoryFact, MemoryQueryResult, MemorySnapshot
 
 __all__ = [
     "DiagnosticContext",
@@ -60,6 +61,10 @@ __all__ = [
     "KnowledgeLoader",
     "KnowledgeSearchResult",
     "KnowledgeValidationError",
+    "MemoryEntry",
+    "MemoryFact",
+    "MemoryQueryResult",
+    "MemorySnapshot",
     "QuestionSelector",
     "SessionTurnResult",
     "WorkflowResult",
