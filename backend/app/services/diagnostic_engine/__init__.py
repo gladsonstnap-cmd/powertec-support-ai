@@ -21,14 +21,20 @@ from app.services.diagnostic_engine.workflow_models import WorkflowResult, Workf
 from app.services.diagnostic_engine.session_engine import DiagnosticSessionEngine
 from app.services.diagnostic_engine.session_models import DiagnosticSession, DiagnosticSessionStatus, SessionTurnResult
 from app.services.diagnostic_engine.session_policy import DiagnosticSessionPolicy
+from app.services.diagnostic_engine.conversation_engine import DiagnosticConversationEngine
+from app.services.diagnostic_engine.conversation_models import ConversationCommand, ConversationInput, ConversationResponse
 
 __all__ = [
     "DiagnosticContext",
+    "DiagnosticConversationEngine",
     "DiagnosticSession",
     "DiagnosticSessionEngine",
     "DiagnosticSessionPolicy",
     "DiagnosticSessionStatus",
     "DiagnosticWorkflowEngine",
+    "ConversationCommand",
+    "ConversationInput",
+    "ConversationResponse",
     "Decision",
     "DecisionEngine",
     "DecisionInput",
