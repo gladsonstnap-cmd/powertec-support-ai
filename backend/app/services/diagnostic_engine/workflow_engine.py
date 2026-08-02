@@ -5,7 +5,9 @@ from typing import Any
 from app.services.diagnostic_engine.decision_engine import DecisionEngine
 from app.services.diagnostic_engine.decision_models import Decision, DecisionInput
 from app.services.diagnostic_engine.evidence_engine import EvidenceEngine
+from app.services.diagnostic_engine.evidence_models import Evidence
 from app.services.diagnostic_engine.hypothesis_engine import HypothesisEngine
+from app.services.diagnostic_engine.hypothesis_models import Hypothesis
 from app.services.diagnostic_engine.incident_classifier import IncidentClassifier
 from app.services.diagnostic_engine.intent_classifier import IntentClassifier
 from app.services.diagnostic_engine.knowledge_base import KnowledgeBase
@@ -42,6 +44,11 @@ class DiagnosticWorkflowEngine:
         context: DiagnosticContext | None = None,
         history: Mapping[str, Any] | Sequence[Decision] | None = None,
         user_confirmation: bool | None = None,
+        previous_hypotheses: Sequence[Hypothesis] | None = None,
+        previous_evidence: Sequence[Evidence] | None = None,
+        previous_decisions: Sequence[Decision] | None = None,
+        questions_asked: Sequence[str] | None = None,
+        known_information: Mapping[str, object] | None = None,
     ) -> WorkflowResult:
         started_at = time.monotonic()
         result = WorkflowResult(
@@ -67,26 +74,43 @@ class DiagnosticWorkflowEngine:
                 category=result.incident.category,
             )
 
-            known_information = self._history_value(history, "known_information", {})
-            asked_question_ids = self._history_value(history, "asked_question_ids", set())
-            evidence_history = self._history_value(history, "evidence_history", [])
-            previous_decisions = self._previous_decisions(history)
+            known_values = dict(
+                known_information
+                if known_information is not None
+                else self._history_value(history, "known_information", {})
+            )
+            asked_question_ids = set(
+                questions_asked
+                if questions_asked is not None
+                else self._history_value(history, "asked_question_ids", set())
+            )
+            evidence_history = list(
+                previous_evidence
+                if previous_evidence is not None
+                else self._history_value(history, "evidence_history", [])
+            )
+            decision_history = tuple(
+                previous_decisions if previous_decisions is not None else self._previous_decisions(history)
+            )
 
             result.steps_executed.append(WorkflowStep.HYPOTHESIS)
-            result.hypotheses = self.hypothesis_engine.generate(
-                message,
-                result.incident.category,
-                known_information=dict(known_information),
-                asked_question_ids=set(asked_question_ids),
-            )
+            if previous_hypotheses is None:
+                result.hypotheses = self.hypothesis_engine.generate(
+                    message,
+                    result.incident.category,
+                    known_information=known_values,
+                    asked_question_ids=asked_question_ids,
+                )
+            else:
+                result.hypotheses = list(previous_hypotheses)
 
             result.steps_executed.append(WorkflowStep.EVIDENCE)
             result.evidence_result = self.evidence_engine.apply(
                 result.hypotheses,
                 message,
-                asked_question_ids=set(asked_question_ids),
-                known_information=dict(known_information),
-                evidence_history=list(evidence_history),
+                asked_question_ids=asked_question_ids,
+                known_information=known_values,
+                evidence_history=evidence_history,
             )
 
             result.steps_executed.append(WorkflowStep.DECISION)
@@ -95,7 +119,7 @@ class DiagnosticWorkflowEngine:
                     hypotheses=result.evidence_result.updated_hypotheses,
                     evidence_result=result.evidence_result,
                     diagnostic_context=context,
-                    previous_decisions=previous_decisions,
+                    previous_decisions=decision_history,
                     user_confirmation=user_confirmation,
                 )
             )

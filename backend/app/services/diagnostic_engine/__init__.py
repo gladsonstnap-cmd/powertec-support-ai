@@ -18,9 +18,16 @@ from app.services.diagnostic_engine.question_selector import QuestionSelector
 from app.services.diagnostic_engine.models import DiagnosticContext, IncidentClassification, IntentClassification
 from app.services.diagnostic_engine.workflow_engine import DiagnosticWorkflowEngine
 from app.services.diagnostic_engine.workflow_models import WorkflowResult, WorkflowStep
+from app.services.diagnostic_engine.session_engine import DiagnosticSessionEngine
+from app.services.diagnostic_engine.session_models import DiagnosticSession, DiagnosticSessionStatus, SessionTurnResult
+from app.services.diagnostic_engine.session_policy import DiagnosticSessionPolicy
 
 __all__ = [
     "DiagnosticContext",
+    "DiagnosticSession",
+    "DiagnosticSessionEngine",
+    "DiagnosticSessionPolicy",
+    "DiagnosticSessionStatus",
     "DiagnosticWorkflowEngine",
     "Decision",
     "DecisionEngine",
@@ -48,6 +55,7 @@ __all__ = [
     "KnowledgeSearchResult",
     "KnowledgeValidationError",
     "QuestionSelector",
+    "SessionTurnResult",
     "WorkflowResult",
     "WorkflowStep",
 ]
