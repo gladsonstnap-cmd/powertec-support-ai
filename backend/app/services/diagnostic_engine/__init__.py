@@ -36,6 +36,7 @@ from app.services.diagnostic_engine.planner_models import (
     PlanStepType,
 )
 from app.services.diagnostic_engine.planner_policy import DiagnosticPlannerPolicy
+from app.services.diagnostic_engine.planner_engine import DiagnosticPlannerEngine
 
 __all__ = [
     "DiagnosticContext",
@@ -46,6 +47,7 @@ __all__ = [
     "DiagnosticPlanResult",
     "DiagnosticPlanStatus",
     "DiagnosticPlannerPolicy",
+    "DiagnosticPlannerEngine",
     "DiagnosticSession",
     "DiagnosticSessionEngine",
     "DiagnosticSessionPolicy",
