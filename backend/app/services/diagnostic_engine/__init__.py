@@ -26,12 +26,24 @@ from app.services.diagnostic_engine.conversation_models import ConversationComma
 from app.services.diagnostic_engine.memory_models import MemoryEntry, MemoryFact, MemoryQueryResult, MemorySnapshot
 from app.services.diagnostic_engine.memory_policy import DiagnosticMemoryPolicy
 from app.services.diagnostic_engine.memory_engine import DiagnosticMemoryEngine
+from app.services.diagnostic_engine.planner_models import (
+    DiagnosticPlan,
+    DiagnosticPlanResult,
+    DiagnosticPlanStatus,
+    PlanCondition,
+    PlanStep,
+    PlanStepStatus,
+    PlanStepType,
+)
 
 __all__ = [
     "DiagnosticContext",
     "DiagnosticConversationEngine",
     "DiagnosticMemoryPolicy",
     "DiagnosticMemoryEngine",
+    "DiagnosticPlan",
+    "DiagnosticPlanResult",
+    "DiagnosticPlanStatus",
     "DiagnosticSession",
     "DiagnosticSessionEngine",
     "DiagnosticSessionPolicy",
@@ -69,6 +81,10 @@ __all__ = [
     "MemoryFact",
     "MemoryQueryResult",
     "MemorySnapshot",
+    "PlanCondition",
+    "PlanStep",
+    "PlanStepStatus",
+    "PlanStepType",
     "QuestionSelector",
     "SessionTurnResult",
     "WorkflowResult",
