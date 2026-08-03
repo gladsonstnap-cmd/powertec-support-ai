@@ -24,10 +24,12 @@ from app.services.diagnostic_engine.session_policy import DiagnosticSessionPolic
 from app.services.diagnostic_engine.conversation_engine import DiagnosticConversationEngine
 from app.services.diagnostic_engine.conversation_models import ConversationCommand, ConversationInput, ConversationResponse
 from app.services.diagnostic_engine.memory_models import MemoryEntry, MemoryFact, MemoryQueryResult, MemorySnapshot
+from app.services.diagnostic_engine.memory_policy import DiagnosticMemoryPolicy
 
 __all__ = [
     "DiagnosticContext",
     "DiagnosticConversationEngine",
+    "DiagnosticMemoryPolicy",
     "DiagnosticSession",
     "DiagnosticSessionEngine",
     "DiagnosticSessionPolicy",
