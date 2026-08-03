@@ -37,6 +37,15 @@ from app.services.diagnostic_engine.planner_models import (
 )
 from app.services.diagnostic_engine.planner_policy import DiagnosticPlannerPolicy
 from app.services.diagnostic_engine.planner_engine import DiagnosticPlannerEngine
+from app.services.diagnostic_engine.execution_models import (
+    ExecutionAction,
+    ExecutionParameter,
+    ExecutionPlan,
+    ExecutionResult,
+    ExecutionRisk,
+    ExecutionStatus,
+    ExecutionTarget,
+)
 
 __all__ = [
     "DiagnosticContext",
@@ -69,6 +78,13 @@ __all__ = [
     "EvidenceResult",
     "EvidenceScorer",
     "EvidenceType",
+    "ExecutionAction",
+    "ExecutionParameter",
+    "ExecutionPlan",
+    "ExecutionResult",
+    "ExecutionRisk",
+    "ExecutionStatus",
+    "ExecutionTarget",
     "Hypothesis",
     "HypothesisEngine",
     "HypothesisUpdate",
