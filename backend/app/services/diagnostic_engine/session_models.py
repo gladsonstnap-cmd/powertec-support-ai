@@ -9,6 +9,7 @@ from app.services.diagnostic_engine.hypothesis_models import Hypothesis
 from app.services.diagnostic_engine.knowledge_models import KnowledgeSearchResult
 from app.services.diagnostic_engine.memory_models import MemorySnapshot
 from app.services.diagnostic_engine.models import IncidentClassification, IntentClassification
+from app.services.diagnostic_engine.planner_models import DiagnosticPlan, DiagnosticPlanResult
 from app.services.diagnostic_engine.workflow_models import WorkflowResult
 
 
@@ -43,6 +44,8 @@ class DiagnosticSession:
     answers: tuple[str, ...] = ()
     known_information: dict[str, object] = field(default_factory=dict)
     memory_snapshot: MemorySnapshot = field(default_factory=MemorySnapshot)
+    diagnostic_plan: DiagnosticPlan | None = None
+    planner_result: DiagnosticPlanResult | None = None
     unresolved_information: tuple[str, ...] = ()
     current_question: str | None = None
     user_confirmation: bool | None = None
@@ -66,6 +69,8 @@ class DiagnosticSession:
             object.__setattr__(self, name, tuple(deepcopy(getattr(self, name))))
         object.__setattr__(self, "known_information", deepcopy(dict(self.known_information)))
         object.__setattr__(self, "memory_snapshot", deepcopy(self.memory_snapshot))
+        object.__setattr__(self, "diagnostic_plan", deepcopy(self.diagnostic_plan))
+        object.__setattr__(self, "planner_result", deepcopy(self.planner_result))
         object.__setattr__(self, "metadata", deepcopy(dict(self.metadata)))
 
 

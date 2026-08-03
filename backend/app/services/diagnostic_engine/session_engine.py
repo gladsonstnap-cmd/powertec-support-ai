@@ -8,6 +8,8 @@ from app.services.diagnostic_engine.models import DiagnosticContext
 from app.services.diagnostic_engine.memory_engine import DiagnosticMemoryEngine
 from app.services.diagnostic_engine.memory_models import MemoryEntry, MemoryFact, MemorySnapshot
 from app.services.diagnostic_engine.memory_policy import DiagnosticMemoryPolicy
+from app.services.diagnostic_engine.planner_engine import DiagnosticPlannerEngine
+from app.services.diagnostic_engine.planner_models import DiagnosticPlanResult
 from app.services.diagnostic_engine.session_models import (
     DiagnosticSession,
     DiagnosticSessionStatus,
@@ -32,10 +34,12 @@ class DiagnosticSessionEngine:
         workflow_engine: DiagnosticWorkflowEngine | None = None,
         policy: DiagnosticSessionPolicy | None = None,
         memory_policy: DiagnosticMemoryPolicy | None = None,
+        planner_engine: DiagnosticPlannerEngine | None = None,
     ) -> None:
         self.workflow_engine = workflow_engine if workflow_engine is not None else DiagnosticWorkflowEngine()
         self.policy = policy if policy is not None else DiagnosticSessionPolicy()
         self.memory_policy = memory_policy if memory_policy is not None else DiagnosticMemoryPolicy()
+        self.planner_engine = planner_engine if planner_engine is not None else DiagnosticPlannerEngine()
 
     def start_session(
         self,
@@ -218,6 +222,18 @@ class DiagnosticSessionEngine:
             memory_snapshot = memory.add_entry(entry, known_information=known_information)
             known_information = memory_snapshot.known_information
 
+        planner_result = self._build_plan(
+            workflow_result,
+            memory_snapshot=memory_snapshot,
+            previous_plan=None if is_initial else session.diagnostic_plan,
+            context=context,
+        )
+        diagnostic_plan = planner_result.plan
+        if planner_result.errors:
+            metadata["planner_errors"] = tuple(planner_result.errors)
+        else:
+            metadata.pop("planner_errors", None)
+
         updated = replace(
             session,
             status=status,
@@ -232,6 +248,8 @@ class DiagnosticSessionEngine:
             answers=answers,
             known_information=known_information,
             memory_snapshot=memory_snapshot,
+            diagnostic_plan=diagnostic_plan,
+            planner_result=planner_result,
             unresolved_information=unresolved,
             current_question=current_question,
             user_confirmation=user_confirmation,
@@ -376,6 +394,31 @@ class DiagnosticSessionEngine:
                 identifiers.add(identifier)
                 deduped.append(item)
         return tuple(deduped)
+
+    def _build_plan(
+        self,
+        workflow_result: WorkflowResult,
+        *,
+        memory_snapshot: MemorySnapshot,
+        previous_plan,
+        context: DiagnosticContext | None,
+    ) -> DiagnosticPlanResult:
+        try:
+            return self.planner_engine.build_plan(
+                hypotheses=workflow_result.hypotheses,
+                decision=workflow_result.decision,
+                evidence_result=workflow_result.evidence_result,
+                knowledge_result=workflow_result.knowledge_result,
+                memory_snapshot=memory_snapshot,
+                previous_plan=previous_plan,
+                context=context,
+            )
+        except Exception as exc:  # Planner failures must not invalidate a successful workflow.
+            return DiagnosticPlanResult(
+                success=False,
+                errors=(f"Planner: {type(exc).__name__}: {exc}",),
+                reasoning=("O planejamento falhou sem alterar o resultado do diagnóstico.",),
+            )
 
     @staticmethod
     def _memory_facts(
