@@ -46,10 +46,12 @@ from app.services.diagnostic_engine.execution_models import (
     ExecutionStatus,
     ExecutionTarget,
 )
+from app.services.diagnostic_engine.execution_policy import DiagnosticExecutionPolicy
 
 __all__ = [
     "DiagnosticContext",
     "DiagnosticConversationEngine",
+    "DiagnosticExecutionPolicy",
     "DiagnosticMemoryPolicy",
     "DiagnosticMemoryEngine",
     "DiagnosticPlan",
