@@ -5,6 +5,9 @@ from uuid import uuid4
 from app.services.diagnostic_engine.decision_models import Decision, DecisionType
 from app.services.diagnostic_engine.normalization import normalize_text
 from app.services.diagnostic_engine.models import DiagnosticContext
+from app.services.diagnostic_engine.memory_engine import DiagnosticMemoryEngine
+from app.services.diagnostic_engine.memory_models import MemoryEntry, MemoryFact, MemorySnapshot
+from app.services.diagnostic_engine.memory_policy import DiagnosticMemoryPolicy
 from app.services.diagnostic_engine.session_models import (
     DiagnosticSession,
     DiagnosticSessionStatus,
@@ -28,9 +31,11 @@ class DiagnosticSessionEngine:
         self,
         workflow_engine: DiagnosticWorkflowEngine | None = None,
         policy: DiagnosticSessionPolicy | None = None,
+        memory_policy: DiagnosticMemoryPolicy | None = None,
     ) -> None:
         self.workflow_engine = workflow_engine if workflow_engine is not None else DiagnosticWorkflowEngine()
         self.policy = policy if policy is not None else DiagnosticSessionPolicy()
+        self.memory_policy = memory_policy if memory_policy is not None else DiagnosticMemoryPolicy()
 
     def start_session(
         self,
@@ -51,6 +56,7 @@ class DiagnosticSessionEngine:
             created_at_monotonic=now,
             updated_at_monotonic=now,
             metadata={"session_id_generated": session_id is None},
+            memory_snapshot=MemorySnapshot(),
         )
         workflow_result = self.workflow_engine.run(message, context=context)
         return self._apply_workflow(initial, message, workflow_result, context=context, is_initial=True)
@@ -86,6 +92,7 @@ class DiagnosticSessionEngine:
         if session.current_question and session.current_question not in questions_asked:
             questions_asked = (*questions_asked, session.current_question)
 
+        memory = DiagnosticMemoryEngine(self.memory_policy, session.memory_snapshot)
         workflow_result = self.workflow_engine.run(
             message,
             context=context,
@@ -94,7 +101,7 @@ class DiagnosticSessionEngine:
             previous_evidence=session.evidence_history,
             previous_decisions=session.decisions,
             questions_asked=questions_asked,
-            known_information=session.known_information,
+            known_information=memory.known_information(),
         )
         return self._apply_workflow(
             session,
@@ -191,6 +198,25 @@ class DiagnosticSessionEngine:
         )
         interaction_count = session.interaction_count + 1
         answers = session.answers if is_initial else (*session.answers, message)
+        memory_snapshot = session.memory_snapshot
+        if workflow_result.success:
+            memory = DiagnosticMemoryEngine(self.memory_policy, session.memory_snapshot)
+            facts = self._memory_facts(
+                session,
+                message,
+                known_information,
+                is_initial=is_initial,
+                created_at=now,
+            )
+            entry = MemoryEntry(
+                facts=facts,
+                hypotheses=hypotheses,
+                evidences=(evidence_result.evidence,) if evidence_result is not None else (),
+                questions=(current_question,) if current_question else (),
+                answers=(message,) if not is_initial and message.strip() else (),
+            )
+            memory_snapshot = memory.add_entry(entry, known_information=known_information)
+            known_information = memory_snapshot.known_information
 
         updated = replace(
             session,
@@ -205,6 +231,7 @@ class DiagnosticSessionEngine:
             questions_asked=questions_asked or session.questions_asked,
             answers=answers,
             known_information=known_information,
+            memory_snapshot=memory_snapshot,
             unresolved_information=unresolved,
             current_question=current_question,
             user_confirmation=user_confirmation,
@@ -349,6 +376,54 @@ class DiagnosticSessionEngine:
                 identifiers.add(identifier)
                 deduped.append(item)
         return tuple(deduped)
+
+    @staticmethod
+    def _memory_facts(
+        session: DiagnosticSession,
+        message: str,
+        known_information: dict[str, object],
+        *,
+        is_initial: bool,
+        created_at: float,
+    ) -> tuple[MemoryFact, ...]:
+        facts = []
+        if is_initial:
+            facts.append(
+                MemoryFact(
+                    id=f"{session.session_id}:original_message",
+                    category="session",
+                    key="original_message",
+                    value=message,
+                    confidence=1.0,
+                    created_at=created_at,
+                    source="user",
+                )
+            )
+        else:
+            facts.append(
+                MemoryFact(
+                    id=f"{session.session_id}:answer:{session.interaction_count}",
+                    category="conversation",
+                    key="last_answer",
+                    value=message,
+                    confidence=1.0,
+                    created_at=created_at,
+                    source="user",
+                )
+            )
+        for key, value in known_information.items():
+            facts.append(
+                MemoryFact(
+                    id=f"{session.session_id}:diagnostic:{key}",
+                    category="diagnostic",
+                    key=str(key),
+                    value=value,
+                    confidence=1.0,
+                    created_at=created_at,
+                    source="workflow",
+                )
+            )
+        return tuple(facts)
 
     @staticmethod
     def _validate_message(message: str) -> None:
