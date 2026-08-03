@@ -25,11 +25,13 @@ from app.services.diagnostic_engine.conversation_engine import DiagnosticConvers
 from app.services.diagnostic_engine.conversation_models import ConversationCommand, ConversationInput, ConversationResponse
 from app.services.diagnostic_engine.memory_models import MemoryEntry, MemoryFact, MemoryQueryResult, MemorySnapshot
 from app.services.diagnostic_engine.memory_policy import DiagnosticMemoryPolicy
+from app.services.diagnostic_engine.memory_engine import DiagnosticMemoryEngine
 
 __all__ = [
     "DiagnosticContext",
     "DiagnosticConversationEngine",
     "DiagnosticMemoryPolicy",
+    "DiagnosticMemoryEngine",
     "DiagnosticSession",
     "DiagnosticSessionEngine",
     "DiagnosticSessionPolicy",
