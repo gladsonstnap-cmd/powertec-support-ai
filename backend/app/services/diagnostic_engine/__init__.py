@@ -72,6 +72,7 @@ from app.services.diagnostic_engine.executor_models import (
     ExecutorStatus,
     RollbackPlan,
 )
+from app.services.diagnostic_engine.executor_policy import DiagnosticExecutorPolicy
 
 __all__ = [
     "DiagnosticContext",
@@ -82,6 +83,7 @@ __all__ = [
     "DiagnosticConversationEngine",
     "DiagnosticExecutionPolicy",
     "DiagnosticExecutionEngine",
+    "DiagnosticExecutorPolicy",
     "DiagnosticMemoryPolicy",
     "DiagnosticMemoryEngine",
     "DiagnosticPlan",
