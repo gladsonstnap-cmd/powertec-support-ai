@@ -58,9 +58,11 @@ from app.services.diagnostic_engine.approval_models import (
     ApprovalType,
     ApprovedActionGrant,
 )
+from app.services.diagnostic_engine.approval_policy import DiagnosticApprovalPolicy
 
 __all__ = [
     "DiagnosticContext",
+    "DiagnosticApprovalPolicy",
     "DiagnosticConversationEngine",
     "DiagnosticExecutionPolicy",
     "DiagnosticExecutionEngine",
