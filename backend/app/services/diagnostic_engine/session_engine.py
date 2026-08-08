@@ -3,6 +3,8 @@ from dataclasses import replace
 from uuid import uuid4
 
 from app.services.diagnostic_engine.decision_models import Decision, DecisionType
+from app.services.diagnostic_engine.execution_engine import DiagnosticExecutionEngine
+from app.services.diagnostic_engine.execution_models import ExecutionResult
 from app.services.diagnostic_engine.normalization import normalize_text
 from app.services.diagnostic_engine.models import DiagnosticContext
 from app.services.diagnostic_engine.memory_engine import DiagnosticMemoryEngine
@@ -35,11 +37,13 @@ class DiagnosticSessionEngine:
         policy: DiagnosticSessionPolicy | None = None,
         memory_policy: DiagnosticMemoryPolicy | None = None,
         planner_engine: DiagnosticPlannerEngine | None = None,
+        execution_engine: DiagnosticExecutionEngine | None = None,
     ) -> None:
         self.workflow_engine = workflow_engine if workflow_engine is not None else DiagnosticWorkflowEngine()
         self.policy = policy if policy is not None else DiagnosticSessionPolicy()
         self.memory_policy = memory_policy if memory_policy is not None else DiagnosticMemoryPolicy()
         self.planner_engine = planner_engine if planner_engine is not None else DiagnosticPlannerEngine()
+        self.execution_engine = execution_engine if execution_engine is not None else DiagnosticExecutionEngine()
 
     def start_session(
         self,
@@ -234,6 +238,16 @@ class DiagnosticSessionEngine:
         else:
             metadata.pop("planner_errors", None)
 
+        execution_result = self._build_execution(
+            diagnostic_plan,
+            previous_execution_plan=None if is_initial else session.execution_plan,
+        )
+        execution_plan = execution_result.execution_plan
+        if execution_result.errors:
+            metadata["execution_errors"] = tuple(dict.fromkeys(execution_result.errors))
+        else:
+            metadata.pop("execution_errors", None)
+
         updated = replace(
             session,
             status=status,
@@ -250,6 +264,8 @@ class DiagnosticSessionEngine:
             memory_snapshot=memory_snapshot,
             diagnostic_plan=diagnostic_plan,
             planner_result=planner_result,
+            execution_plan=execution_plan,
+            execution_result=execution_result,
             unresolved_information=unresolved,
             current_question=current_question,
             user_confirmation=user_confirmation,
@@ -418,6 +434,24 @@ class DiagnosticSessionEngine:
                 success=False,
                 errors=(f"Planner: {type(exc).__name__}: {exc}",),
                 reasoning=("O planejamento falhou sem alterar o resultado do diagnóstico.",),
+            )
+
+    def _build_execution(
+        self,
+        diagnostic_plan,
+        *,
+        previous_execution_plan,
+    ) -> ExecutionResult:
+        try:
+            return self.execution_engine.build_execution_plan(
+                diagnostic_plan=diagnostic_plan,
+                previous_execution_plan=previous_execution_plan,
+            )
+        except Exception as exc:  # Execution planning must not invalidate the diagnostic session.
+            return ExecutionResult(
+                success=False,
+                errors=(f"Execution: {type(exc).__name__}: {exc}",),
+                reasoning=("A descrição de execução falhou sem alterar o diagnóstico.",),
             )
 
     @staticmethod
