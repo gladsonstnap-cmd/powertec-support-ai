@@ -48,6 +48,16 @@ from app.services.diagnostic_engine.execution_models import (
 )
 from app.services.diagnostic_engine.execution_policy import DiagnosticExecutionPolicy
 from app.services.diagnostic_engine.execution_engine import DiagnosticExecutionEngine
+from app.services.diagnostic_engine.approval_models import (
+    ActionApprovalRequest,
+    ApprovalActor,
+    ApprovalDecision,
+    ApprovalResult,
+    ApprovalScope,
+    ApprovalStatus,
+    ApprovalType,
+    ApprovedActionGrant,
+)
 
 __all__ = [
     "DiagnosticContext",
@@ -69,6 +79,14 @@ __all__ = [
     "ConversationCommand",
     "ConversationInput",
     "ConversationResponse",
+    "ActionApprovalRequest",
+    "ApprovalActor",
+    "ApprovalDecision",
+    "ApprovalResult",
+    "ApprovalScope",
+    "ApprovalStatus",
+    "ApprovalType",
+    "ApprovedActionGrant",
     "Decision",
     "DecisionEngine",
     "DecisionInput",
