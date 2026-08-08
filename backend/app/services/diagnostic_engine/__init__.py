@@ -59,10 +59,12 @@ from app.services.diagnostic_engine.approval_models import (
     ApprovedActionGrant,
 )
 from app.services.diagnostic_engine.approval_policy import DiagnosticApprovalPolicy
+from app.services.diagnostic_engine.approval_engine import DiagnosticApprovalEngine
 
 __all__ = [
     "DiagnosticContext",
     "DiagnosticApprovalPolicy",
+    "DiagnosticApprovalEngine",
     "DiagnosticConversationEngine",
     "DiagnosticExecutionPolicy",
     "DiagnosticExecutionEngine",
