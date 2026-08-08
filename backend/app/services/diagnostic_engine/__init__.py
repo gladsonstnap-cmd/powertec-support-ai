@@ -60,9 +60,23 @@ from app.services.diagnostic_engine.approval_models import (
 )
 from app.services.diagnostic_engine.approval_policy import DiagnosticApprovalPolicy
 from app.services.diagnostic_engine.approval_engine import DiagnosticApprovalEngine
+from app.services.diagnostic_engine.executor_models import (
+    AuditEvent,
+    AuditEventType,
+    ExecutionAttempt,
+    ExecutionAuditTrail,
+    ExecutionContext,
+    ExecutorBlockReason,
+    ExecutorRequest,
+    ExecutorResult,
+    ExecutorStatus,
+    RollbackPlan,
+)
 
 __all__ = [
     "DiagnosticContext",
+    "AuditEvent",
+    "AuditEventType",
     "DiagnosticApprovalPolicy",
     "DiagnosticApprovalEngine",
     "DiagnosticConversationEngine",
@@ -105,12 +119,19 @@ __all__ = [
     "EvidenceScorer",
     "EvidenceType",
     "ExecutionAction",
+    "ExecutionAttempt",
+    "ExecutionAuditTrail",
+    "ExecutionContext",
     "ExecutionParameter",
     "ExecutionPlan",
     "ExecutionResult",
     "ExecutionRisk",
     "ExecutionStatus",
     "ExecutionTarget",
+    "ExecutorBlockReason",
+    "ExecutorRequest",
+    "ExecutorResult",
+    "ExecutorStatus",
     "Hypothesis",
     "HypothesisEngine",
     "HypothesisUpdate",
@@ -132,6 +153,7 @@ __all__ = [
     "PlanStepStatus",
     "PlanStepType",
     "QuestionSelector",
+    "RollbackPlan",
     "SessionTurnResult",
     "WorkflowResult",
     "WorkflowStep",
