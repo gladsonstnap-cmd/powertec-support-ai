@@ -4,6 +4,12 @@ from enum import StrEnum
 from typing import Any
 
 from app.services.diagnostic_engine.decision_models import Decision
+from app.services.diagnostic_engine.approval_models import (
+    ActionApprovalRequest,
+    ApprovalDecision,
+    ApprovalResult,
+    ApprovedActionGrant,
+)
 from app.services.diagnostic_engine.evidence_models import Evidence
 from app.services.diagnostic_engine.execution_models import ExecutionPlan, ExecutionResult
 from app.services.diagnostic_engine.hypothesis_models import Hypothesis
@@ -49,6 +55,10 @@ class DiagnosticSession:
     planner_result: DiagnosticPlanResult | None = None
     execution_plan: ExecutionPlan | None = None
     execution_result: ExecutionResult | None = None
+    approval_requests: tuple[ActionApprovalRequest, ...] = ()
+    approval_decisions: tuple[ApprovalDecision, ...] = ()
+    approval_grants: tuple[ApprovedActionGrant, ...] = ()
+    approval_result: ApprovalResult | None = None
     unresolved_information: tuple[str, ...] = ()
     current_question: str | None = None
     user_confirmation: bool | None = None
@@ -66,6 +76,9 @@ class DiagnosticSession:
             "decisions",
             "questions_asked",
             "answers",
+            "approval_requests",
+            "approval_decisions",
+            "approval_grants",
             "unresolved_information",
             "errors",
         ):
@@ -76,6 +89,7 @@ class DiagnosticSession:
         object.__setattr__(self, "planner_result", deepcopy(self.planner_result))
         object.__setattr__(self, "execution_plan", deepcopy(self.execution_plan))
         object.__setattr__(self, "execution_result", deepcopy(self.execution_result))
+        object.__setattr__(self, "approval_result", deepcopy(self.approval_result))
         object.__setattr__(self, "metadata", deepcopy(dict(self.metadata)))
 
 

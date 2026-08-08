@@ -2,6 +2,15 @@ import time
 from dataclasses import replace
 from uuid import uuid4
 
+from app.services.diagnostic_engine.approval_engine import DiagnosticApprovalEngine
+from app.services.diagnostic_engine.approval_models import (
+    ActionApprovalRequest,
+    ApprovalActor,
+    ApprovalDecision,
+    ApprovalResult,
+    ApprovalStatus,
+    ApprovedActionGrant,
+)
 from app.services.diagnostic_engine.decision_models import Decision, DecisionType
 from app.services.diagnostic_engine.execution_engine import DiagnosticExecutionEngine
 from app.services.diagnostic_engine.execution_models import ExecutionResult
@@ -38,12 +47,14 @@ class DiagnosticSessionEngine:
         memory_policy: DiagnosticMemoryPolicy | None = None,
         planner_engine: DiagnosticPlannerEngine | None = None,
         execution_engine: DiagnosticExecutionEngine | None = None,
+        approval_engine: DiagnosticApprovalEngine | None = None,
     ) -> None:
         self.workflow_engine = workflow_engine if workflow_engine is not None else DiagnosticWorkflowEngine()
         self.policy = policy if policy is not None else DiagnosticSessionPolicy()
         self.memory_policy = memory_policy if memory_policy is not None else DiagnosticMemoryPolicy()
         self.planner_engine = planner_engine if planner_engine is not None else DiagnosticPlannerEngine()
         self.execution_engine = execution_engine if execution_engine is not None else DiagnosticExecutionEngine()
+        self.approval_engine = approval_engine if approval_engine is not None else DiagnosticApprovalEngine()
 
     def start_session(
         self,
@@ -248,6 +259,13 @@ class DiagnosticSessionEngine:
         else:
             metadata.pop("execution_errors", None)
 
+        approval_requests, approval_result = self._build_approvals(
+            session,
+            execution_plan,
+            now_monotonic=now,
+        )
+        metadata = self._metadata_with_approval_errors(metadata, approval_result)
+
         updated = replace(
             session,
             status=status,
@@ -266,6 +284,8 @@ class DiagnosticSessionEngine:
             planner_result=planner_result,
             execution_plan=execution_plan,
             execution_result=execution_result,
+            approval_requests=approval_requests,
+            approval_result=approval_result,
             unresolved_information=unresolved,
             current_question=current_question,
             user_confirmation=user_confirmation,
@@ -276,6 +296,232 @@ class DiagnosticSessionEngine:
         )
         response = self._response_message(decision, status)
         return self._turn(updated, workflow_result, response, previous_status, True)
+
+    def request_action_approval(
+        self,
+        session: DiagnosticSession,
+        action_id: str,
+        requested_by: ApprovalActor | None = None,
+        now_monotonic: float = 0.0,
+        ttl_seconds: int | None = None,
+    ) -> SessionTurnResult:
+        action = self._find_action(session, action_id)
+        if action is None or session.execution_plan is None:
+            return self._approval_failure_turn(session, f"Action {action_id!r} was not found in the execution plan.")
+        duplicate = next(
+            (
+                item for item in session.approval_requests
+                if item.status == ApprovalStatus.PENDING
+                and item.execution_plan_id == session.execution_plan.plan_id
+                and item.action_id == action.action_id
+                and item.action_snapshot == action
+            ),
+            None,
+        )
+        if duplicate is not None:
+            result = ApprovalResult(
+                success=True,
+                request=duplicate,
+                reasoning=("An equivalent approval request is already pending.",),
+            )
+            return self._approval_turn(session, result, "A solicitação de aprovação já está pendente.", changed=False)
+        result = self._call_approval(
+            "create_request",
+            session.execution_plan,
+            action,
+            session_id=session.session_id,
+            requested_by=requested_by,
+            now_monotonic=now_monotonic,
+            ttl_seconds=ttl_seconds,
+        )
+        requests = (*session.approval_requests, result.request) if result.success and result.request else session.approval_requests
+        return self._approval_turn(
+            session,
+            result,
+            "Solicitação de aprovação registrada." if result.success else "Não foi possível solicitar aprovação.",
+            approval_requests=requests,
+            changed=result.success,
+        )
+
+    def _build_approvals(
+        self,
+        session: DiagnosticSession,
+        execution_plan,
+        *,
+        now_monotonic: float,
+    ) -> tuple[tuple[ActionApprovalRequest, ...], ApprovalResult | None]:
+        requests = session.approval_requests
+        current_result = session.approval_result
+        if execution_plan is None:
+            return requests, current_result
+        for action in execution_plan.actions:
+            if not self.approval_engine.policy.requires_approval(action.risk):
+                continue
+            duplicate = any(
+                item.status == ApprovalStatus.PENDING
+                and item.execution_plan_id == execution_plan.plan_id
+                and item.action_id == action.action_id
+                and item.action_snapshot == action
+                for item in requests
+            )
+            if duplicate:
+                continue
+            result = self._call_approval(
+                "create_request",
+                execution_plan,
+                action,
+                session_id=session.session_id,
+                now_monotonic=now_monotonic,
+            )
+            current_result = result
+            if result.success and result.request is not None:
+                requests = (*requests, result.request)
+        return requests, current_result
+
+    def _call_approval(self, method_name: str, *args, **kwargs) -> ApprovalResult:
+        try:
+            method = getattr(self.approval_engine, method_name)
+            result = method(*args, **kwargs)
+            if not isinstance(result, ApprovalResult):
+                raise TypeError(f"{method_name} must return ApprovalResult")
+            return result
+        except Exception as exc:  # Approval failures must preserve the diagnostic session.
+            return ApprovalResult(
+                success=False,
+                errors=(f"Approval: {type(exc).__name__}: {exc}",),
+            )
+
+    def _approval_failure_turn(self, session: DiagnosticSession, error: str) -> SessionTurnResult:
+        return self._approval_turn(
+            session,
+            ApprovalResult(success=False, errors=(error,)),
+            "Não foi possível atualizar a aprovação.",
+            changed=False,
+        )
+
+    def _approval_turn(
+        self,
+        session: DiagnosticSession,
+        result: ApprovalResult,
+        response: str,
+        *,
+        approval_requests: tuple[ActionApprovalRequest, ...] | None = None,
+        approval_decisions: tuple[ApprovalDecision, ...] | None = None,
+        approval_grants: tuple[ApprovedActionGrant, ...] | None = None,
+        changed: bool,
+    ) -> SessionTurnResult:
+        metadata = self._metadata_with_approval_errors(dict(session.metadata), result)
+        updated = replace(
+            session,
+            approval_requests=session.approval_requests if approval_requests is None else approval_requests,
+            approval_decisions=session.approval_decisions if approval_decisions is None else approval_decisions,
+            approval_grants=session.approval_grants if approval_grants is None else approval_grants,
+            approval_result=result,
+            metadata=metadata,
+        )
+        return self._turn(updated, None, response, session.status, changed, errors=result.errors)
+
+    @staticmethod
+    def _metadata_with_approval_errors(
+        metadata: dict[str, object],
+        result: ApprovalResult | None,
+    ) -> dict[str, object]:
+        if result is None or not result.errors:
+            return metadata
+        existing = tuple(metadata.get("approval_errors", ()))
+        metadata["approval_errors"] = tuple(dict.fromkeys((*existing, *result.errors)))
+        return metadata
+
+    @staticmethod
+    def _find_action(session: DiagnosticSession, action_id: str | None):
+        if session.execution_plan is None or not isinstance(action_id, str):
+            return None
+        return next((item for item in session.execution_plan.actions if item.action_id == action_id), None)
+
+    @staticmethod
+    def _find_request(session: DiagnosticSession, approval_id: str):
+        return next(
+            (item for item in reversed(session.approval_requests) if item.approval_id == approval_id),
+            None,
+        )
+
+    def decide_action_approval(
+        self,
+        session: DiagnosticSession,
+        approval_id: str,
+        status: ApprovalStatus,
+        decided_by: ApprovalActor,
+        now_monotonic: float,
+        reason: str | None = None,
+    ) -> SessionTurnResult:
+        request = self._find_request(session, approval_id)
+        if request is None:
+            return self._approval_failure_turn(session, f"Approval request {approval_id!r} was not found.")
+        result = self._call_approval(
+            "decide", request, status, decided_by, now_monotonic, reason=reason
+        )
+        decisions = (*session.approval_decisions, result.decision) if result.success and result.decision else session.approval_decisions
+        return self._approval_turn(
+            session,
+            result,
+            "Decisão de aprovação registrada." if result.success else "Não foi possível registrar a decisão.",
+            approval_decisions=decisions,
+            changed=result.success,
+        )
+
+    def create_action_grant(
+        self,
+        session: DiagnosticSession,
+        approval_id: str,
+        now_monotonic: float,
+    ) -> SessionTurnResult:
+        request = self._find_request(session, approval_id)
+        decision = next(
+            (
+                item for item in reversed(session.approval_decisions)
+                if item.approval_id == approval_id and item.status == ApprovalStatus.APPROVED
+            ),
+            None,
+        )
+        action = self._find_action(session, request.action_id if request else None)
+        if request is None:
+            return self._approval_failure_turn(session, f"Approval request {approval_id!r} was not found.")
+        if decision is None:
+            return self._approval_failure_turn(session, "An APPROVED decision was not found for the request.")
+        if action is None:
+            return self._approval_failure_turn(session, "The approved action was not found in the execution plan.")
+        result = self._call_approval("create_grant", request, decision, action, now_monotonic)
+        grants = (*session.approval_grants, result.grant) if result.success and result.grant else session.approval_grants
+        return self._approval_turn(
+            session,
+            result,
+            "Grant de aprovação registrado." if result.success else "Não foi possível criar o grant.",
+            approval_grants=grants,
+            changed=result.success,
+        )
+
+    def consume_action_grant(
+        self,
+        session: DiagnosticSession,
+        grant_id: str,
+        action_id: str,
+        now_monotonic: float,
+    ) -> SessionTurnResult:
+        grant = next((item for item in reversed(session.approval_grants) if item.grant_id == grant_id), None)
+        action = self._find_action(session, action_id)
+        if grant is None:
+            return self._approval_failure_turn(session, f"Approval grant {grant_id!r} was not found.")
+        if action is None:
+            return self._approval_failure_turn(session, f"Action {action_id!r} was not found in the execution plan.")
+        result = self._call_approval("consume_grant", grant, action, now_monotonic)
+        grants = (*session.approval_grants, result.grant) if result.success and result.grant else session.approval_grants
+        return self._approval_turn(
+            session,
+            result,
+            "Grant marcado como utilizado; nenhuma ação foi executada." if result.success else "Não foi possível consumir o grant.",
+            approval_grants=grants,
+            changed=result.success,
+        )
 
     def _status_for(self, result: WorkflowResult) -> DiagnosticSessionStatus:
         if not result.success or result.decision is None:
