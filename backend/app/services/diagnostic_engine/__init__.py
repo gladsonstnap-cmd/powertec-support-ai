@@ -74,6 +74,22 @@ from app.services.diagnostic_engine.executor_models import (
 )
 from app.services.diagnostic_engine.executor_policy import DiagnosticExecutorPolicy
 from app.services.diagnostic_engine.executor_engine import DiagnosticExecutorEngine
+from app.services.diagnostic_engine.local_executor_models import (
+    AllowedLocalOperation,
+    LocalAdapterType,
+    LocalExecutionCommand,
+    LocalExecutionContract,
+    LocalExecutionState,
+    LocalOperationArgument,
+    LocalOperationType,
+    LocalOutputChunk,
+    LocalRawExecutionResult,
+    LocalSandboxPolicy,
+    LocalSanitizedResult,
+    OutputStreamType,
+    RedactedValue,
+    RedactionReason,
+)
 
 __all__ = [
     "DiagnosticContext",
@@ -86,6 +102,20 @@ __all__ = [
     "DiagnosticExecutionEngine",
     "DiagnosticExecutorPolicy",
     "DiagnosticExecutorEngine",
+    "AllowedLocalOperation",
+    "LocalAdapterType",
+    "LocalExecutionCommand",
+    "LocalExecutionContract",
+    "LocalExecutionState",
+    "LocalOperationArgument",
+    "LocalOperationType",
+    "LocalOutputChunk",
+    "LocalRawExecutionResult",
+    "LocalSandboxPolicy",
+    "LocalSanitizedResult",
+    "OutputStreamType",
+    "RedactedValue",
+    "RedactionReason",
     "DiagnosticMemoryPolicy",
     "DiagnosticMemoryEngine",
     "DiagnosticPlan",
