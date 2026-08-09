@@ -18,6 +18,11 @@ from app.services.diagnostic_engine.executor_models import (
     ExecutorRequest,
     ExecutorResult,
 )
+from app.services.diagnostic_engine.local_executor_models import (
+    LocalExecutionContract,
+    LocalRawExecutionResult,
+    LocalSanitizedResult,
+)
 from app.services.diagnostic_engine.hypothesis_models import Hypothesis
 from app.services.diagnostic_engine.knowledge_models import KnowledgeSearchResult
 from app.services.diagnostic_engine.memory_models import MemorySnapshot
@@ -70,6 +75,12 @@ class DiagnosticSession:
     executor_results: tuple[ExecutorResult, ...] = ()
     execution_audit_trails: tuple[ExecutionAuditTrail, ...] = ()
     current_executor_result: ExecutorResult | None = None
+    local_execution_contracts: tuple[LocalExecutionContract, ...] = ()
+    local_raw_results: tuple[LocalRawExecutionResult, ...] = ()
+    local_sanitized_results: tuple[LocalSanitizedResult, ...] = ()
+    current_local_execution_contract: LocalExecutionContract | None = None
+    current_local_raw_result: LocalRawExecutionResult | None = None
+    current_local_sanitized_result: LocalSanitizedResult | None = None
     unresolved_information: tuple[str, ...] = ()
     current_question: str | None = None
     user_confirmation: bool | None = None
@@ -94,6 +105,9 @@ class DiagnosticSession:
             "execution_attempts",
             "executor_results",
             "execution_audit_trails",
+            "local_execution_contracts",
+            "local_raw_results",
+            "local_sanitized_results",
             "unresolved_information",
             "errors",
         ):
@@ -106,6 +120,9 @@ class DiagnosticSession:
         object.__setattr__(self, "execution_result", deepcopy(self.execution_result))
         object.__setattr__(self, "approval_result", deepcopy(self.approval_result))
         object.__setattr__(self, "current_executor_result", deepcopy(self.current_executor_result))
+        object.__setattr__(self, "current_local_execution_contract", deepcopy(self.current_local_execution_contract))
+        object.__setattr__(self, "current_local_raw_result", deepcopy(self.current_local_raw_result))
+        object.__setattr__(self, "current_local_sanitized_result", deepcopy(self.current_local_sanitized_result))
         object.__setattr__(self, "metadata", deepcopy(dict(self.metadata)))
 
 
