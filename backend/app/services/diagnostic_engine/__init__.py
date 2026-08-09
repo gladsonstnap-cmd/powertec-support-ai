@@ -96,6 +96,7 @@ from app.services.diagnostic_engine.local_operation_validator import (
     LocalOperationValidationResult,
     SafeLocalOperationValidator,
 )
+from app.services.diagnostic_engine.local_system_information_adapter import LocalSystemInformationAdapter
 
 __all__ = [
     "DiagnosticContext",
@@ -112,6 +113,7 @@ __all__ = [
     "SafeLocalOperationCatalog",
     "LocalOperationValidationResult",
     "SafeLocalOperationValidator",
+    "LocalSystemInformationAdapter",
     "AllowedLocalOperation",
     "LocalAdapterType",
     "LocalExecutionCommand",
