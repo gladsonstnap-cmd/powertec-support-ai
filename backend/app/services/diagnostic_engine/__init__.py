@@ -92,6 +92,10 @@ from app.services.diagnostic_engine.local_executor_models import (
 )
 from app.services.diagnostic_engine.local_executor_policy import DiagnosticLocalExecutorPolicy
 from app.services.diagnostic_engine.local_operation_catalog import SafeLocalOperationCatalog
+from app.services.diagnostic_engine.local_operation_validator import (
+    LocalOperationValidationResult,
+    SafeLocalOperationValidator,
+)
 
 __all__ = [
     "DiagnosticContext",
@@ -106,6 +110,8 @@ __all__ = [
     "DiagnosticExecutorEngine",
     "DiagnosticLocalExecutorPolicy",
     "SafeLocalOperationCatalog",
+    "LocalOperationValidationResult",
+    "SafeLocalOperationValidator",
     "AllowedLocalOperation",
     "LocalAdapterType",
     "LocalExecutionCommand",
