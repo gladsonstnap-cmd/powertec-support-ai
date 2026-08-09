@@ -91,6 +91,7 @@ from app.services.diagnostic_engine.local_executor_models import (
     RedactionReason,
 )
 from app.services.diagnostic_engine.local_executor_policy import DiagnosticLocalExecutorPolicy
+from app.services.diagnostic_engine.local_operation_catalog import SafeLocalOperationCatalog
 
 __all__ = [
     "DiagnosticContext",
@@ -104,6 +105,7 @@ __all__ = [
     "DiagnosticExecutorPolicy",
     "DiagnosticExecutorEngine",
     "DiagnosticLocalExecutorPolicy",
+    "SafeLocalOperationCatalog",
     "AllowedLocalOperation",
     "LocalAdapterType",
     "LocalExecutionCommand",
