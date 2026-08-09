@@ -98,6 +98,10 @@ from app.services.diagnostic_engine.local_operation_validator import (
 )
 from app.services.diagnostic_engine.local_system_information_adapter import LocalSystemInformationAdapter
 from app.services.diagnostic_engine.local_disk_information_adapter import LocalDiskInformationAdapter
+from app.services.diagnostic_engine.local_adapter_dispatcher import (
+    LocalAdapterDispatcher,
+    LocalAdapterDispatchResult,
+)
 
 __all__ = [
     "DiagnosticContext",
@@ -116,6 +120,8 @@ __all__ = [
     "SafeLocalOperationValidator",
     "LocalSystemInformationAdapter",
     "LocalDiskInformationAdapter",
+    "LocalAdapterDispatcher",
+    "LocalAdapterDispatchResult",
     "AllowedLocalOperation",
     "LocalAdapterType",
     "LocalExecutionCommand",
