@@ -13,17 +13,20 @@ from app.services.diagnostic_engine.approval_models import (
 )
 from app.services.diagnostic_engine.decision_models import Decision, DecisionType
 from app.services.diagnostic_engine.execution_engine import DiagnosticExecutionEngine
-from app.services.diagnostic_engine.execution_models import ExecutionResult, ExecutionRisk, ExecutionTarget
+from app.services.diagnostic_engine.execution_models import ExecutionResult
 from app.services.diagnostic_engine.executor_engine import DiagnosticExecutorEngine
 from app.services.diagnostic_engine.executor_models import ExecutorRequest, ExecutorResult
 from app.services.diagnostic_engine.local_executor_models import (
-    LocalAdapterType,
     LocalExecutionContract,
     LocalExecutionState,
     LocalOperationArgument,
-    LocalOperationType,
     LocalRawExecutionResult,
     LocalSanitizedResult,
+)
+from app.services.diagnostic_engine.local_executor_policy import DiagnosticLocalExecutorPolicy
+from app.services.diagnostic_engine.local_adapter_dispatcher import (
+    LocalAdapterDispatcher,
+    LocalAdapterDispatchResult,
 )
 from app.services.diagnostic_engine.local_operation_validator import (
     LocalOperationValidationResult,
@@ -53,6 +56,54 @@ _STATUS_COMMANDS = {"status"}
 _HUMAN_COMMANDS = {"atendente", "humano"}
 
 
+class _LegacySystemInformationAdapter(LocalSystemInformationAdapter):
+    """Temporary compatibility bridge for legacy injected adapter doubles."""
+
+    def __init__(self, legacy_adapter: object) -> None:
+        self._legacy_adapter = legacy_adapter
+
+    def execute(self, contract, now_monotonic):
+        try:
+            return self._legacy_adapter.execute(contract, now_monotonic)
+        except Exception:
+            timestamp = (
+                now_monotonic
+                if isinstance(now_monotonic, int | float)
+                and not isinstance(now_monotonic, bool)
+                and now_monotonic >= 0
+                else None
+            )
+            return LocalRawExecutionResult(
+                command_id=contract.command.command_id,
+                state=LocalExecutionState.FAILED,
+                started_at_monotonic=timestamp,
+                finished_at_monotonic=timestamp,
+                exit_code=None,
+                stdout="",
+                stderr="Falha na execução local.",
+                output_chunks=(),
+                timed_out=False,
+                cancelled=False,
+                errors=("Falha na execução local.",),
+            )
+
+    def sanitize(self, raw_result):
+        try:
+            return self._legacy_adapter.sanitize(raw_result)
+        except Exception:
+            return LocalSanitizedResult(
+                command_id=raw_result.command_id,
+                state=LocalExecutionState.FAILED,
+                exit_code=None,
+                stdout_summary="",
+                stderr_summary="Falha na execução local.",
+                redactions=(),
+                truncated=False,
+                output_bytes=len("Falha na execução local.".encode("utf-8")),
+                errors=("Falha na execução local.",),
+            )
+
+
 class DiagnosticSessionEngine:
     """Stateless coordinator that returns a new session snapshot per turn."""
 
@@ -67,6 +118,7 @@ class DiagnosticSessionEngine:
         executor_engine: DiagnosticExecutorEngine | None = None,
         local_operation_validator: SafeLocalOperationValidator | None = None,
         local_system_information_adapter: LocalSystemInformationAdapter | None = None,
+        local_adapter_dispatcher: LocalAdapterDispatcher | None = None,
     ) -> None:
         self.workflow_engine = workflow_engine if workflow_engine is not None else DiagnosticWorkflowEngine()
         self.policy = policy if policy is not None else DiagnosticSessionPolicy()
@@ -78,11 +130,29 @@ class DiagnosticSessionEngine:
         self.local_operation_validator = (
             local_operation_validator if local_operation_validator is not None else SafeLocalOperationValidator()
         )
-        self.local_system_information_adapter = (
+        legacy_adapter = (
             local_system_information_adapter
             if local_system_information_adapter is not None
             else LocalSystemInformationAdapter()
         )
+        self.local_system_information_adapter = legacy_adapter
+        if local_adapter_dispatcher is not None:
+            if not isinstance(local_adapter_dispatcher, LocalAdapterDispatcher):
+                raise ValueError("local_adapter_dispatcher must be a LocalAdapterDispatcher")
+            self.local_adapter_dispatcher = local_adapter_dispatcher
+        else:
+            compatible_adapter = (
+                legacy_adapter
+                if isinstance(legacy_adapter, LocalSystemInformationAdapter)
+                else _LegacySystemInformationAdapter(legacy_adapter)
+            )
+            dispatcher_policy = getattr(self.local_operation_validator, "policy", None)
+            if not isinstance(dispatcher_policy, DiagnosticLocalExecutorPolicy):
+                dispatcher_policy = DiagnosticLocalExecutorPolicy()
+            self.local_adapter_dispatcher = LocalAdapterDispatcher(
+                system_information_adapter=compatible_adapter,
+                policy=dispatcher_policy,
+            )
 
     def start_session(
         self,
@@ -779,9 +849,9 @@ class DiagnosticSessionEngine:
         dry_run: bool = True,
     ) -> SessionTurnResult:
         """Build a local structural contract; this method never executes it."""
-        if operation_name != "read_system_information":
+        if not self.local_adapter_dispatcher.contains(operation_name):
             return self._local_failure_turn(
-                session, "Only read_system_information is supported by the local integration."
+                session, "The local operation is not supported by the adapter dispatcher."
             )
         request = self._find_executor_request(session, request_id)
         if request is None:
@@ -853,7 +923,7 @@ class DiagnosticSessionEngine:
         return self._turn(
             updated,
             None,
-            "Contrato local read_system_information registrado; nenhuma coleta foi executada.",
+            f"Contrato local {operation_name} registrado; nenhuma coleta foi executada.",
             session.status,
             True,
         )
@@ -865,7 +935,7 @@ class DiagnosticSessionEngine:
         contract_id: str,
         now_monotonic: float,
     ) -> SessionTurnResult:
-        """Explicitly run the sole read-only local adapter and store sanitized output."""
+        """Explicitly dispatch one registered local contract and store returned snapshots."""
         contract = next(
             (
                 item for item in reversed(session.local_execution_contracts)
@@ -882,50 +952,59 @@ class DiagnosticSessionEngine:
         if error is not None:
             return self._local_failure_turn(session, error)
         try:
-            raw = self.local_system_information_adapter.execute(contract, now_monotonic)
-            if not isinstance(raw, LocalRawExecutionResult):
-                raise TypeError("execute must return LocalRawExecutionResult")
+            dispatch_result = self.local_adapter_dispatcher.dispatch(contract, now_monotonic)
+            if not isinstance(dispatch_result, LocalAdapterDispatchResult):
+                raise TypeError("dispatch must return LocalAdapterDispatchResult")
         except Exception:
-            raw = self._local_raw_failure(
-                contract.command.command_id,
-                now_monotonic,
-                "Falha controlada ao executar read_system_information.",
+            dispatch_result = LocalAdapterDispatchResult(
+                success=False,
+                contract=contract,
+                errors=("Falha na execução local.",),
             )
-        try:
-            sanitized = self.local_system_information_adapter.sanitize(raw)
-            if not isinstance(sanitized, LocalSanitizedResult):
-                raise TypeError("sanitize must return LocalSanitizedResult")
-        except Exception:
-            sanitized = LocalSanitizedResult(
-                command_id=raw.command_id,
-                state=LocalExecutionState.FAILED,
-                exit_code=None,
-                stdout_summary="",
-                stderr_summary="Falha controlada ao sanitizar o resultado local.",
-                redactions=(),
-                truncated=False,
-                output_bytes=0,
-                errors=("Falha controlada ao sanitizar o resultado local.",),
+        raw = dispatch_result.raw_result
+        sanitized = dispatch_result.sanitized_result
+        errors = tuple(
+            dict.fromkeys(
+                (
+                    *dispatch_result.errors,
+                    *(raw.errors if raw is not None else ()),
+                    *(sanitized.errors if sanitized is not None else ()),
+                )
             )
-        errors = tuple(dict.fromkeys((*raw.errors, *sanitized.errors)))
+        )
         metadata = self._metadata_with_local_errors(dict(session.metadata), errors)
         updated = replace(
             session,
-            local_raw_results=(*session.local_raw_results, raw),
-            local_sanitized_results=(*session.local_sanitized_results, sanitized),
+            local_raw_results=(
+                (*session.local_raw_results, raw) if raw is not None else session.local_raw_results
+            ),
+            local_sanitized_results=(
+                (*session.local_sanitized_results, sanitized)
+                if sanitized is not None
+                else session.local_sanitized_results
+            ),
             current_local_execution_contract=contract,
-            current_local_raw_result=raw,
-            current_local_sanitized_result=sanitized,
+            current_local_raw_result=raw if raw is not None else session.current_local_raw_result,
+            current_local_sanitized_result=(
+                sanitized if sanitized is not None else session.current_local_sanitized_result
+            ),
             metadata=metadata,
         )
         response = (
             "Dry-run local concluído; nenhuma coleta real foi realizada."
-            if contract.command.dry_run and raw.state == LocalExecutionState.SUCCESS
-            else "Coleta local read_system_information concluída com saída sanitizada."
-            if raw.state == LocalExecutionState.SUCCESS
-            else "A coleta local falhou de forma controlada."
+            if contract.command.dry_run and dispatch_result.success
+            else f"Coleta local {contract.command.operation_name} concluída com saída sanitizada."
+            if dispatch_result.success
+            else "A execução local falhou de forma controlada."
         )
-        return self._turn(updated, None, response, session.status, True, errors=errors)
+        return self._turn(
+            updated,
+            None,
+            response,
+            session.status,
+            raw is not None or sanitized is not None or bool(errors),
+            errors=errors,
+        )
 
     def _local_execution_error(
         self,
@@ -933,40 +1012,16 @@ class DiagnosticSessionEngine:
         contract: LocalExecutionContract,
         now_monotonic: float,
     ) -> str | None:
-        operation = contract.operation
-        command = contract.command
         if (
             not isinstance(now_monotonic, int | float)
             or isinstance(now_monotonic, bool)
             or now_monotonic < 0
         ):
             return "The local execution timestamp is invalid."
-        if operation.operation_name != "read_system_information" or command.operation_name != "read_system_information":
-            return "Only read_system_information can be executed locally."
-        if operation.adapter_type != LocalAdapterType.SYSTEM_INFORMATION or command.adapter_type != LocalAdapterType.SYSTEM_INFORMATION:
-            return "The local contract adapter is invalid."
-        if operation.operation_type != LocalOperationType.READ_ONLY or command.operation_type != LocalOperationType.READ_ONLY:
-            return "The local contract operation type is invalid."
-        if command.target != ExecutionTarget.WINDOWS or command.risk != ExecutionRisk.LOW:
-            return "The local contract target or risk is invalid."
-        if command.arguments:
+        if not self.local_adapter_dispatcher.contains(contract.command.operation_name):
+            return "The local operation is not supported by the adapter dispatcher."
+        if contract.command.operation_name == "read_system_information" and contract.command.arguments:
             return "read_system_information does not accept arguments."
-        sandbox = contract.sandbox_policy
-        if any(
-            (
-                sandbox.allow_shell,
-                sandbox.allow_arbitrary_command,
-                sandbox.allow_environment_inheritance,
-                sandbox.allow_network_access,
-                sandbox.allow_filesystem_write,
-                sandbox.allow_registry_write,
-                sandbox.allow_service_state_change,
-                sandbox.allow_process_termination,
-                sandbox.allow_elevation,
-                sandbox.allow_child_processes,
-            )
-        ):
-            return "The local contract sandbox is not conservative."
         request = self._find_executor_request(session, contract.executor_request_id)
         if request is None or request.context.action_id != contract.action_id or request.context.grant_id != contract.grant_id:
             return "The local contract no longer matches its ExecutorRequest."
@@ -983,13 +1038,6 @@ class DiagnosticSessionEngine:
             return "The local contract grant was already used."
         if grant.expires_at_monotonic is not None and now_monotonic >= grant.expires_at_monotonic:
             return "The local contract grant expired."
-        if not command.dry_run and not self.local_operation_validator.policy.can_execute_real_operation(
-            adapter_type=operation.adapter_type,
-            target=command.target,
-            risk=command.risk,
-            operation_type=command.operation_type,
-        ):
-            return "The local policy blocks real execution."
         return None
 
     def _local_failure_turn(self, session: DiagnosticSession, *errors: str) -> SessionTurnResult:
@@ -1013,31 +1061,6 @@ class DiagnosticSessionEngine:
             existing = tuple(metadata.get("local_execution_errors", ()))
             metadata["local_execution_errors"] = tuple(dict.fromkeys((*existing, *errors)))
         return metadata
-
-    @staticmethod
-    def _local_raw_failure(
-        command_id: str, now_monotonic: float, message: str
-    ) -> LocalRawExecutionResult:
-        timestamp = (
-            now_monotonic
-            if isinstance(now_monotonic, int | float)
-            and not isinstance(now_monotonic, bool)
-            and now_monotonic >= 0
-            else None
-        )
-        return LocalRawExecutionResult(
-            command_id=command_id,
-            state=LocalExecutionState.FAILED,
-            started_at_monotonic=timestamp,
-            finished_at_monotonic=timestamp,
-            exit_code=None,
-            stdout="",
-            stderr=message,
-            output_chunks=(),
-            timed_out=False,
-            cancelled=False,
-            errors=(message,),
-        )
 
     def _status_for(self, result: WorkflowResult) -> DiagnosticSessionStatus:
         if not result.success or result.decision is None:
