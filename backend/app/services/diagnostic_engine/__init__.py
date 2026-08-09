@@ -90,6 +90,7 @@ from app.services.diagnostic_engine.local_executor_models import (
     RedactedValue,
     RedactionReason,
 )
+from app.services.diagnostic_engine.local_executor_policy import DiagnosticLocalExecutorPolicy
 
 __all__ = [
     "DiagnosticContext",
@@ -102,6 +103,7 @@ __all__ = [
     "DiagnosticExecutionEngine",
     "DiagnosticExecutorPolicy",
     "DiagnosticExecutorEngine",
+    "DiagnosticLocalExecutorPolicy",
     "AllowedLocalOperation",
     "LocalAdapterType",
     "LocalExecutionCommand",
