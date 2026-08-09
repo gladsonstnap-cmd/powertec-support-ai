@@ -7,6 +7,7 @@ from typing import Mapping
 
 from app.services.diagnostic_engine.execution_models import ExecutionRisk, ExecutionTarget
 from app.services.diagnostic_engine.local_disk_information_adapter import LocalDiskInformationAdapter
+from app.services.diagnostic_engine.local_event_log_adapter import LocalEventLogAdapter
 from app.services.diagnostic_engine.local_executor_models import (
     LocalAdapterType,
     LocalExecutionContract,
@@ -67,7 +68,7 @@ class LocalAdapterDispatchResult:
 
 @dataclass(frozen=True)
 class LocalAdapterDispatcher:
-    """Resolve, execute, and sanitize only three explicitly registered operations."""
+    """Resolve, execute, and sanitize only four explicitly registered operations."""
 
     system_information_adapter: LocalSystemInformationAdapter = field(
         default_factory=LocalSystemInformationAdapter
@@ -76,6 +77,7 @@ class LocalAdapterDispatcher:
         default_factory=LocalDiskInformationAdapter
     )
     policy: DiagnosticLocalExecutorPolicy = field(default_factory=DiagnosticLocalExecutorPolicy)
+    event_log_adapter: LocalEventLogAdapter = field(default_factory=LocalEventLogAdapter)
     _registry: Mapping[str, object] = field(init=False, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
@@ -85,9 +87,12 @@ class LocalAdapterDispatcher:
             raise ValueError("disk_information_adapter must be a LocalDiskInformationAdapter")
         if not isinstance(self.policy, DiagnosticLocalExecutorPolicy):
             raise ValueError("policy must be a DiagnosticLocalExecutorPolicy")
+        if not isinstance(self.event_log_adapter, LocalEventLogAdapter):
+            raise ValueError("event_log_adapter must be a LocalEventLogAdapter")
         registry = {
             "check_disk_information": self.disk_information_adapter,
             "check_disk_space": self.disk_information_adapter,
+            "collect_event_logs": self.event_log_adapter,
             "read_system_information": self.system_information_adapter,
         }
         object.__setattr__(self, "_registry", MappingProxyType(registry))
@@ -174,6 +179,7 @@ class LocalAdapterDispatcher:
             "read_system_information": LocalAdapterType.SYSTEM_INFORMATION,
             "check_disk_information": LocalAdapterType.DISK_INFORMATION,
             "check_disk_space": LocalAdapterType.DISK_INFORMATION,
+            "collect_event_logs": LocalAdapterType.WINDOWS_EVENT_LOG,
         }.get(command.operation_name)
         if expected_adapter is None or not self.contains(command.operation_name):
             return "Operação local não registrada."

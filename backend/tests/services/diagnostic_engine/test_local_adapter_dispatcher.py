@@ -27,6 +27,10 @@ ROOT = HERE.parents[3]
 DISPATCHER_FILE = ROOT / "app/services/diagnostic_engine/local_adapter_dispatcher.py"
 PACKAGE = DISPATCHER_FILE.with_name("__init__.py")
 OPERATIONS = ("check_disk_information", "check_disk_space", "read_system_information")
+SUPPORTED_OPERATIONS = (
+    "check_disk_information", "check_disk_space", "collect_event_logs",
+    "read_system_information",
+)
 
 
 def contract(operation="read_system_information", *, dry_run=True, sandbox=None):
@@ -129,7 +133,7 @@ def test_registry_is_private_mapping_proxy():
 
 def test_supported_operations_are_sorted_deterministic_tuple():
     dispatcher = LocalAdapterDispatcher()
-    assert dispatcher.supported_operations() == OPERATIONS
+    assert dispatcher.supported_operations() == SUPPORTED_OPERATIONS
     assert isinstance(dispatcher.supported_operations(), tuple)
     assert dispatcher.supported_operations() == dispatcher.supported_operations()
 
