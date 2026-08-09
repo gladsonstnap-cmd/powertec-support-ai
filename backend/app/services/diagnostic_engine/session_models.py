@@ -12,6 +12,12 @@ from app.services.diagnostic_engine.approval_models import (
 )
 from app.services.diagnostic_engine.evidence_models import Evidence
 from app.services.diagnostic_engine.execution_models import ExecutionPlan, ExecutionResult
+from app.services.diagnostic_engine.executor_models import (
+    ExecutionAttempt,
+    ExecutionAuditTrail,
+    ExecutorRequest,
+    ExecutorResult,
+)
 from app.services.diagnostic_engine.hypothesis_models import Hypothesis
 from app.services.diagnostic_engine.knowledge_models import KnowledgeSearchResult
 from app.services.diagnostic_engine.memory_models import MemorySnapshot
@@ -59,6 +65,11 @@ class DiagnosticSession:
     approval_decisions: tuple[ApprovalDecision, ...] = ()
     approval_grants: tuple[ApprovedActionGrant, ...] = ()
     approval_result: ApprovalResult | None = None
+    executor_requests: tuple[ExecutorRequest, ...] = ()
+    execution_attempts: tuple[ExecutionAttempt, ...] = ()
+    executor_results: tuple[ExecutorResult, ...] = ()
+    execution_audit_trails: tuple[ExecutionAuditTrail, ...] = ()
+    current_executor_result: ExecutorResult | None = None
     unresolved_information: tuple[str, ...] = ()
     current_question: str | None = None
     user_confirmation: bool | None = None
@@ -79,6 +90,10 @@ class DiagnosticSession:
             "approval_requests",
             "approval_decisions",
             "approval_grants",
+            "executor_requests",
+            "execution_attempts",
+            "executor_results",
+            "execution_audit_trails",
             "unresolved_information",
             "errors",
         ):
@@ -90,6 +105,7 @@ class DiagnosticSession:
         object.__setattr__(self, "execution_plan", deepcopy(self.execution_plan))
         object.__setattr__(self, "execution_result", deepcopy(self.execution_result))
         object.__setattr__(self, "approval_result", deepcopy(self.approval_result))
+        object.__setattr__(self, "current_executor_result", deepcopy(self.current_executor_result))
         object.__setattr__(self, "metadata", deepcopy(dict(self.metadata)))
 
 

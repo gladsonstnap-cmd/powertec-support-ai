@@ -14,6 +14,8 @@ from app.services.diagnostic_engine.approval_models import (
 from app.services.diagnostic_engine.decision_models import Decision, DecisionType
 from app.services.diagnostic_engine.execution_engine import DiagnosticExecutionEngine
 from app.services.diagnostic_engine.execution_models import ExecutionResult
+from app.services.diagnostic_engine.executor_engine import DiagnosticExecutorEngine
+from app.services.diagnostic_engine.executor_models import ExecutorRequest, ExecutorResult
 from app.services.diagnostic_engine.normalization import normalize_text
 from app.services.diagnostic_engine.models import DiagnosticContext
 from app.services.diagnostic_engine.memory_engine import DiagnosticMemoryEngine
@@ -48,6 +50,7 @@ class DiagnosticSessionEngine:
         planner_engine: DiagnosticPlannerEngine | None = None,
         execution_engine: DiagnosticExecutionEngine | None = None,
         approval_engine: DiagnosticApprovalEngine | None = None,
+        executor_engine: DiagnosticExecutorEngine | None = None,
     ) -> None:
         self.workflow_engine = workflow_engine if workflow_engine is not None else DiagnosticWorkflowEngine()
         self.policy = policy if policy is not None else DiagnosticSessionPolicy()
@@ -55,6 +58,7 @@ class DiagnosticSessionEngine:
         self.planner_engine = planner_engine if planner_engine is not None else DiagnosticPlannerEngine()
         self.execution_engine = execution_engine if execution_engine is not None else DiagnosticExecutionEngine()
         self.approval_engine = approval_engine if approval_engine is not None else DiagnosticApprovalEngine()
+        self.executor_engine = executor_engine if executor_engine is not None else DiagnosticExecutorEngine()
 
     def start_session(
         self,
@@ -521,6 +525,220 @@ class DiagnosticSessionEngine:
             "Grant marcado como utilizado; nenhuma ação foi executada." if result.success else "Não foi possível consumir o grant.",
             approval_grants=grants,
             changed=result.success,
+        )
+
+    def build_executor_request(
+        self,
+        session: DiagnosticSession,
+        action_id: str,
+        grant_id: str,
+        now_monotonic: float,
+        dry_run: bool = True,
+        timeout_seconds: int | None = None,
+    ) -> SessionTurnResult:
+        """Build and record an executor contract without executing its action."""
+        action = self._find_action(session, action_id)
+        grant = next(
+            (item for item in reversed(session.approval_grants) if item.grant_id == grant_id),
+            None,
+        )
+        if session.execution_plan is None:
+            return self._executor_failure_turn(session, "The session has no execution plan.")
+        if action is None:
+            return self._executor_failure_turn(
+                session, f"Action {action_id!r} was not found in the execution plan."
+            )
+        if grant is None:
+            return self._executor_failure_turn(
+                session, f"Approval grant {grant_id!r} was not found in the session history."
+            )
+        if grant.execution_plan_id != session.execution_plan.plan_id:
+            return self._executor_failure_turn(
+                session, "The approval grant does not belong to the current execution plan."
+            )
+
+        expected_timeout = (
+            self.executor_engine.policy.default_timeout_seconds
+            if timeout_seconds is None
+            else timeout_seconds
+        )
+        duplicate = next(
+            (
+                item for item in reversed(session.executor_requests)
+                if item.context.execution_plan_id == session.execution_plan.plan_id
+                and item.context.action_id == action.action_id
+                and item.context.grant_id == grant.grant_id
+                and item.dry_run == dry_run
+                and item.timeout_seconds == expected_timeout
+                and not item.grant_snapshot.used
+            ),
+            None,
+        )
+        if duplicate is not None:
+            existing = next(
+                (
+                    item for item in reversed(session.executor_results)
+                    if item.request == duplicate
+                ),
+                None,
+            )
+            result = existing or ExecutorResult(
+                success=False,
+                request=duplicate,
+                reasoning=("An equivalent executor request already exists.",),
+            )
+            return self._executor_turn(
+                session,
+                result,
+                "A requisição equivalente do executor já está registrada.",
+                changed=False,
+                record=False,
+            )
+
+        result = self._call_executor(
+            "build_request",
+            session_id=session.session_id,
+            diagnostic_plan_id=session.diagnostic_plan.plan_id if session.diagnostic_plan else None,
+            execution_plan=session.execution_plan,
+            action=action,
+            grant=grant,
+            now_monotonic=now_monotonic,
+            dry_run=dry_run,
+            timeout_seconds=timeout_seconds,
+        )
+        return self._executor_turn(
+            session,
+            result,
+            "Requisição estrutural do executor registrada." if result.request else "Não foi possível criar a requisição do executor.",
+            changed=True,
+        )
+
+    def validate_executor_request(
+        self,
+        session: DiagnosticSession,
+        request_id: str,
+        now_monotonic: float,
+    ) -> SessionTurnResult:
+        """Validate a recorded executor request without executing its action."""
+        request = self._find_executor_request(session, request_id)
+        if request is None:
+            return self._executor_failure_turn(
+                session, f"Executor request {request_id!r} was not found."
+            )
+        result = self._call_executor("validate_request", request, now_monotonic)
+        return self._executor_turn(
+            session,
+            result,
+            "Requisição do executor validada estruturalmente." if result.attempt else "A validação estrutural foi bloqueada.",
+            changed=True,
+        )
+
+    def simulate_executor_request(
+        self,
+        session: DiagnosticSession,
+        request_id: str,
+        now_monotonic: float,
+    ) -> SessionTurnResult:
+        """Record a structural dry-run; this method never executes the action."""
+        request = self._find_executor_request(session, request_id)
+        if request is None:
+            return self._executor_failure_turn(
+                session, f"Executor request {request_id!r} was not found."
+            )
+        result = self._call_executor("simulate", request, now_monotonic)
+        return self._executor_turn(
+            session,
+            result,
+            "Dry-run estrutural concluído; nenhuma ação foi executada."
+            if result.success
+            else "O dry-run estrutural foi bloqueado; nenhuma ação foi executada.",
+            changed=True,
+        )
+
+    def _call_executor(self, method_name: str, *args, **kwargs) -> ExecutorResult:
+        try:
+            method = getattr(self.executor_engine, method_name)
+            result = method(*args, **kwargs)
+            if not isinstance(result, ExecutorResult):
+                raise TypeError(f"{method_name} must return ExecutorResult")
+            return result
+        except Exception as exc:  # Executor failures must preserve the diagnostic session.
+            return ExecutorResult(
+                success=False,
+                errors=(f"Executor: {type(exc).__name__}: {exc}",),
+                reasoning=("The executor boundary blocked the operation without executing an action.",),
+            )
+
+    def _executor_failure_turn(self, session: DiagnosticSession, error: str) -> SessionTurnResult:
+        return self._executor_turn(
+            session,
+            ExecutorResult(success=False, errors=(error,)),
+            "Não foi possível atualizar o executor.",
+            changed=True,
+        )
+
+    def _executor_turn(
+        self,
+        session: DiagnosticSession,
+        result: ExecutorResult,
+        response: str,
+        *,
+        changed: bool,
+        record: bool = True,
+    ) -> SessionTurnResult:
+        if not record:
+            return self._turn(session, None, response, session.status, changed, errors=result.errors)
+
+        requests = session.executor_requests
+        if result.request is not None and result.request not in requests:
+            requests = (*requests, result.request)
+        attempts = (
+            (*session.execution_attempts, result.attempt)
+            if result.attempt is not None
+            else session.execution_attempts
+        )
+        trails = session.execution_audit_trails
+        if result.request is not None and result.audit_events:
+            try:
+                trail = self.executor_engine.build_audit_trail(
+                    session.session_id,
+                    result.request.context.execution_plan_id,
+                    result.audit_events,
+                    (result.attempt,) if result.attempt is not None else (),
+                )
+                trails = (*trails, trail)
+            except Exception as exc:
+                result = ExecutorResult(
+                    success=False,
+                    request=result.request,
+                    attempt=result.attempt,
+                    audit_events=result.audit_events,
+                    reasoning=result.reasoning,
+                    errors=(*result.errors, f"Executor audit: {type(exc).__name__}: {exc}"),
+                    metadata=result.metadata,
+                )
+        metadata = dict(session.metadata)
+        if result.errors:
+            existing = tuple(metadata.get("executor_errors", ()))
+            metadata["executor_errors"] = tuple(dict.fromkeys((*existing, *result.errors)))
+        updated = replace(
+            session,
+            executor_requests=requests,
+            execution_attempts=attempts,
+            executor_results=(*session.executor_results, result),
+            execution_audit_trails=trails,
+            current_executor_result=result,
+            metadata=metadata,
+        )
+        return self._turn(updated, None, response, session.status, changed, errors=result.errors)
+
+    @staticmethod
+    def _find_executor_request(session: DiagnosticSession, request_id: str) -> ExecutorRequest | None:
+        if not isinstance(request_id, str):
+            return None
+        return next(
+            (item for item in reversed(session.executor_requests) if item.request_id == request_id),
+            None,
         )
 
     def _status_for(self, result: WorkflowResult) -> DiagnosticSessionStatus:
