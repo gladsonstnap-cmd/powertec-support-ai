@@ -33,6 +33,19 @@ from app.services.diagnostic_engine.local_operation_validator import (
     SafeLocalOperationValidator,
 )
 from app.services.diagnostic_engine.local_system_information_adapter import LocalSystemInformationAdapter
+from app.services.diagnostic_engine.network_probe_dispatcher import (
+    NetworkProbeDispatcher,
+    NetworkProbeDispatchResult,
+)
+from app.services.diagnostic_engine.network_probe_models import (
+    NetworkProbeRequest,
+    NetworkProbeType,
+)
+from app.services.diagnostic_engine.network_probe_policy import NetworkProbePolicy
+from app.services.diagnostic_engine.network_probe_validator import (
+    NetworkProbeValidationResult,
+    NetworkProbeValidator,
+)
 from app.services.diagnostic_engine.normalization import normalize_text
 from app.services.diagnostic_engine.models import DiagnosticContext
 from app.services.diagnostic_engine.memory_engine import DiagnosticMemoryEngine
@@ -119,6 +132,8 @@ class DiagnosticSessionEngine:
         local_operation_validator: SafeLocalOperationValidator | None = None,
         local_system_information_adapter: LocalSystemInformationAdapter | None = None,
         local_adapter_dispatcher: LocalAdapterDispatcher | None = None,
+        network_probe_validator: NetworkProbeValidator | None = None,
+        network_probe_dispatcher: NetworkProbeDispatcher | None = None,
     ) -> None:
         self.workflow_engine = workflow_engine if workflow_engine is not None else DiagnosticWorkflowEngine()
         self.policy = policy if policy is not None else DiagnosticSessionPolicy()
@@ -153,6 +168,31 @@ class DiagnosticSessionEngine:
                 system_information_adapter=compatible_adapter,
                 policy=dispatcher_policy,
             )
+        validator_policy = getattr(network_probe_validator, "policy", None)
+        dispatcher_probe_policy = getattr(network_probe_dispatcher, "policy", None)
+        if (
+            isinstance(validator_policy, NetworkProbePolicy)
+            and isinstance(dispatcher_probe_policy, NetworkProbePolicy)
+            and validator_policy != dispatcher_probe_policy
+        ):
+            raise ValueError("network probe validator and dispatcher policies must match")
+        shared_probe_policy = (
+            validator_policy
+            if isinstance(validator_policy, NetworkProbePolicy)
+            else dispatcher_probe_policy
+            if isinstance(dispatcher_probe_policy, NetworkProbePolicy)
+            else NetworkProbePolicy()
+        )
+        self.network_probe_validator = (
+            network_probe_validator
+            if network_probe_validator is not None
+            else NetworkProbeValidator(shared_probe_policy)
+        )
+        self.network_probe_dispatcher = (
+            network_probe_dispatcher
+            if network_probe_dispatcher is not None
+            else NetworkProbeDispatcher(shared_probe_policy)
+        )
 
     def start_session(
         self,
@@ -834,6 +874,218 @@ class DiagnosticSessionEngine:
             (item for item in reversed(session.executor_requests) if item.request_id == request_id),
             None,
         )
+
+    def build_network_probe_request(
+        self,
+        session: DiagnosticSession,
+        *,
+        action_id: str,
+        grant_id: str,
+        probe_id: str,
+        request_id: str,
+        probe_type: NetworkProbeType,
+        host: str,
+        port: int | None = None,
+        timeout_ms: int | None = None,
+        attempt: int = 1,
+        dry_run: bool = True,
+        created_at_monotonic: float,
+        existing_probe_count: int | None = None,
+    ) -> SessionTurnResult:
+        """Explicitly validate and store one probe request without dispatching it."""
+        if probe_type != NetworkProbeType.PING:
+            return self._network_probe_failure_turn(session, "Tipo de probe não suportado.")
+        action = self._find_action(session, action_id)
+        if action is None:
+            return self._network_probe_failure_turn(session, "A ação do probe de rede não foi encontrada.")
+        grant = self._find_grant(session, grant_id)
+        if grant is None:
+            return self._network_probe_failure_turn(session, "O grant do probe de rede não foi encontrado.")
+        count = len(session.network_probe_requests) if existing_probe_count is None else existing_probe_count
+        try:
+            validation = self.network_probe_validator.build_request(
+                execution_action=action,
+                grant=grant,
+                probe_id=probe_id,
+                session_id=session.session_id,
+                request_id=request_id,
+                probe_type=probe_type,
+                host=host,
+                port=port,
+                timeout_ms=timeout_ms,
+                attempt=attempt,
+                dry_run=dry_run,
+                created_at_monotonic=created_at_monotonic,
+                existing_probe_count=count,
+            )
+            if not isinstance(validation, NetworkProbeValidationResult):
+                raise TypeError("invalid network probe validation result")
+        except Exception:
+            return self._network_probe_failure_turn(session, "Falha no probe de rede.")
+        if not validation.success or validation.request is None:
+            return self._network_probe_failure_turn(
+                session,
+                *(validation.errors or ("O validator bloqueou o probe de rede.",)),
+            )
+        candidate = validation.request
+        duplicate = next(
+            (
+                item
+                for item in reversed(session.network_probe_requests)
+                if self._equivalent_network_probe_request(item, candidate)
+            ),
+            None,
+        )
+        if duplicate is not None:
+            return self._turn(
+                session,
+                None,
+                "Request de probe de rede equivalente já registrado.",
+                session.status,
+                False,
+            )
+        updated = replace(
+            session,
+            network_probe_requests=(*session.network_probe_requests, candidate),
+            current_network_probe_request=candidate,
+        )
+        return self._turn(
+            updated,
+            None,
+            "Request estrutural de ping registrado; nenhum probe foi executado.",
+            session.status,
+            True,
+        )
+
+    def dispatch_network_probe(
+        self,
+        session: DiagnosticSession,
+        *,
+        probe_id: str,
+        now_monotonic: float,
+    ) -> SessionTurnResult:
+        """Explicitly dispatch one stored probe request and retain returned snapshots."""
+        request = next(
+            (
+                item
+                for item in reversed(session.network_probe_requests)
+                if item.probe_id == probe_id
+            ),
+            None,
+        )
+        if request is None:
+            return self._network_probe_failure_turn(session, "Request de probe de rede não encontrado.")
+        try:
+            dispatch_result = self.network_probe_dispatcher.dispatch(request, now_monotonic)
+            if not isinstance(dispatch_result, NetworkProbeDispatchResult):
+                raise TypeError("invalid network probe dispatch result")
+        except Exception:
+            dispatch_result = NetworkProbeDispatchResult(
+                success=False,
+                probe_type=request.probe_type,
+                errors=("Falha no probe de rede.",),
+            )
+        errors = tuple(dict.fromkeys(dispatch_result.errors))
+        metadata = self._metadata_with_network_probe_errors(dict(session.metadata), errors)
+        probe_result = dispatch_result.result
+        updated = replace(
+            session,
+            network_probe_dispatch_results=(
+                *session.network_probe_dispatch_results,
+                dispatch_result,
+            ),
+            network_probe_results=(
+                (*session.network_probe_results, probe_result)
+                if probe_result is not None
+                else session.network_probe_results
+            ),
+            current_network_probe_request=request,
+            current_network_probe_dispatch_result=dispatch_result,
+            current_network_probe_result=(
+                probe_result if probe_result is not None else session.current_network_probe_result
+            ),
+            metadata=metadata,
+        )
+        response = (
+            "Dry-run de ping concluído; nenhum pacote foi enviado."
+            if request.dry_run and dispatch_result.success
+            else "Probe de rede concluído."
+            if dispatch_result.success
+            else "O probe de rede falhou de forma controlada."
+        )
+        return self._turn(
+            updated,
+            None,
+            response,
+            session.status,
+            True,
+            errors=errors,
+        )
+
+    @staticmethod
+    def _find_grant(session: DiagnosticSession, grant_id: str):
+        if not isinstance(grant_id, str):
+            return None
+        return next(
+            (item for item in reversed(session.approval_grants) if item.grant_id == grant_id),
+            None,
+        )
+
+    @staticmethod
+    def _equivalent_network_probe_request(
+        left: NetworkProbeRequest,
+        right: NetworkProbeRequest,
+    ) -> bool:
+        return (
+            left.probe_id,
+            left.request_id,
+            left.action_id,
+            left.grant_id,
+            left.probe_type,
+            left.target.host,
+            left.target.port,
+            left.timeout_ms,
+            left.attempt,
+            left.dry_run,
+        ) == (
+            right.probe_id,
+            right.request_id,
+            right.action_id,
+            right.grant_id,
+            right.probe_type,
+            right.target.host,
+            right.target.port,
+            right.timeout_ms,
+            right.attempt,
+            right.dry_run,
+        )
+
+    def _network_probe_failure_turn(
+        self,
+        session: DiagnosticSession,
+        *errors: str,
+    ) -> SessionTurnResult:
+        unique = tuple(dict.fromkeys(error for error in errors if error))
+        metadata = self._metadata_with_network_probe_errors(dict(session.metadata), unique)
+        updated = replace(session, metadata=metadata)
+        return self._turn(
+            updated,
+            None,
+            "O probe de rede foi bloqueado de forma controlada.",
+            session.status,
+            bool(unique),
+            errors=unique,
+        )
+
+    @staticmethod
+    def _metadata_with_network_probe_errors(
+        metadata: dict[str, object],
+        errors: tuple[str, ...],
+    ) -> dict[str, object]:
+        if errors:
+            existing = tuple(metadata.get("network_probe_errors", ()))
+            metadata["network_probe_errors"] = tuple(dict.fromkeys((*existing, *errors)))
+        return metadata
 
     def build_local_execution_contract(
         self,

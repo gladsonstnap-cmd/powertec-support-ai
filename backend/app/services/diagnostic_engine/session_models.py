@@ -23,6 +23,8 @@ from app.services.diagnostic_engine.local_executor_models import (
     LocalRawExecutionResult,
     LocalSanitizedResult,
 )
+from app.services.diagnostic_engine.network_probe_dispatcher import NetworkProbeDispatchResult
+from app.services.diagnostic_engine.network_probe_models import NetworkProbeRequest, NetworkProbeResult
 from app.services.diagnostic_engine.hypothesis_models import Hypothesis
 from app.services.diagnostic_engine.knowledge_models import KnowledgeSearchResult
 from app.services.diagnostic_engine.memory_models import MemorySnapshot
@@ -81,6 +83,12 @@ class DiagnosticSession:
     current_local_execution_contract: LocalExecutionContract | None = None
     current_local_raw_result: LocalRawExecutionResult | None = None
     current_local_sanitized_result: LocalSanitizedResult | None = None
+    network_probe_requests: tuple[NetworkProbeRequest, ...] = ()
+    network_probe_results: tuple[NetworkProbeResult, ...] = ()
+    network_probe_dispatch_results: tuple[NetworkProbeDispatchResult, ...] = ()
+    current_network_probe_request: NetworkProbeRequest | None = None
+    current_network_probe_result: NetworkProbeResult | None = None
+    current_network_probe_dispatch_result: NetworkProbeDispatchResult | None = None
     unresolved_information: tuple[str, ...] = ()
     current_question: str | None = None
     user_confirmation: bool | None = None
@@ -108,6 +116,9 @@ class DiagnosticSession:
             "local_execution_contracts",
             "local_raw_results",
             "local_sanitized_results",
+            "network_probe_requests",
+            "network_probe_results",
+            "network_probe_dispatch_results",
             "unresolved_information",
             "errors",
         ):
@@ -123,6 +134,9 @@ class DiagnosticSession:
         object.__setattr__(self, "current_local_execution_contract", deepcopy(self.current_local_execution_contract))
         object.__setattr__(self, "current_local_raw_result", deepcopy(self.current_local_raw_result))
         object.__setattr__(self, "current_local_sanitized_result", deepcopy(self.current_local_sanitized_result))
+        object.__setattr__(self, "current_network_probe_request", deepcopy(self.current_network_probe_request))
+        object.__setattr__(self, "current_network_probe_result", deepcopy(self.current_network_probe_result))
+        object.__setattr__(self, "current_network_probe_dispatch_result", deepcopy(self.current_network_probe_dispatch_result))
         object.__setattr__(self, "metadata", deepcopy(dict(self.metadata)))
 
 
