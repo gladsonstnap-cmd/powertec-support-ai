@@ -101,6 +101,7 @@ from app.services.diagnostic_engine.local_disk_information_adapter import LocalD
 from app.services.diagnostic_engine.local_event_log_adapter import LocalEventLogAdapter
 from app.services.diagnostic_engine.local_windows_service_adapter import LocalWindowsServiceAdapter
 from app.services.diagnostic_engine.local_process_adapter import LocalProcessAdapter
+from app.services.diagnostic_engine.local_network_diagnostic_adapter import LocalNetworkDiagnosticAdapter
 from app.services.diagnostic_engine.local_adapter_dispatcher import (
     LocalAdapterDispatcher,
     LocalAdapterDispatchResult,
@@ -126,6 +127,7 @@ __all__ = [
     "LocalEventLogAdapter",
     "LocalWindowsServiceAdapter",
     "LocalProcessAdapter",
+    "LocalNetworkDiagnosticAdapter",
     "LocalAdapterDispatcher",
     "LocalAdapterDispatchResult",
     "AllowedLocalOperation",
