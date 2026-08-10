@@ -117,6 +117,18 @@ from app.services.diagnostic_engine.network_probe_validator import (
 )
 from app.services.diagnostic_engine.safe_ping_adapter import SafePingAdapter
 from app.services.diagnostic_engine.safe_ping_backend import SafePingBackend
+from app.services.diagnostic_engine.network_probe_audit import (
+    NetworkProbeAuditEvent,
+    NetworkProbeAuditEventType,
+    NetworkProbeAuditTrail,
+    append_event,
+)
+from app.services.diagnostic_engine.network_probe_rate_limit import (
+    NetworkProbeRateLimitBlockReason,
+    NetworkProbeRateLimiter,
+    NetworkProbeRateLimitPolicy,
+    NetworkProbeRateLimitResult,
+)
 from app.services.diagnostic_engine.network_probe_dispatcher import (
     NetworkProbeDispatcher,
     NetworkProbeDispatchResult,
@@ -158,6 +170,14 @@ __all__ = [
     "NetworkProbeValidator",
     "SafePingAdapter",
     "SafePingBackend",
+    "NetworkProbeAuditEvent",
+    "NetworkProbeAuditEventType",
+    "NetworkProbeAuditTrail",
+    "append_event",
+    "NetworkProbeRateLimitBlockReason",
+    "NetworkProbeRateLimiter",
+    "NetworkProbeRateLimitPolicy",
+    "NetworkProbeRateLimitResult",
     "NetworkProbeDispatcher",
     "NetworkProbeDispatchResult",
     "LocalAdapterDispatcher",
