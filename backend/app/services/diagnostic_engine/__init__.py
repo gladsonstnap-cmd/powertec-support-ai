@@ -115,6 +115,7 @@ from app.services.diagnostic_engine.network_probe_validator import (
     NetworkProbeValidationResult,
     NetworkProbeValidator,
 )
+from app.services.diagnostic_engine.safe_ping_adapter import SafePingAdapter
 from app.services.diagnostic_engine.local_adapter_dispatcher import (
     LocalAdapterDispatcher,
     LocalAdapterDispatchResult,
@@ -150,6 +151,7 @@ __all__ = [
     "NetworkProbePolicy",
     "NetworkProbeValidationResult",
     "NetworkProbeValidator",
+    "SafePingAdapter",
     "LocalAdapterDispatcher",
     "LocalAdapterDispatchResult",
     "AllowedLocalOperation",
