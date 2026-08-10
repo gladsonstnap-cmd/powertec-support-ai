@@ -24,12 +24,14 @@ class PingBackendResult:
     success: bool = False
     timed_out: bool = False
     latency_ms: float | None = None
+    remote_ip: str | None = None
+    unavailable: bool = False
 
     def __post_init__(self) -> None:
-        if not isinstance(self.success, bool) or not isinstance(self.timed_out, bool):
+        if not all(isinstance(value, bool) for value in (self.success, self.timed_out, self.unavailable)):
             raise ValueError("backend result flags must be boolean")
-        if self.success and self.timed_out:
-            raise ValueError("a successful ping cannot be timed out")
+        if sum((self.success, self.timed_out, self.unavailable)) > 1:
+            raise ValueError("backend result states are mutually exclusive")
         if self.latency_ms is not None and (
             not isinstance(self.latency_ms, int | float)
             or isinstance(self.latency_ms, bool)
@@ -38,6 +40,14 @@ class PingBackendResult:
             raise ValueError("latency_ms must be non-negative or None")
         if not self.success and self.latency_ms is not None:
             raise ValueError("a failed ping must not report latency")
+        if self.remote_ip is not None:
+            try:
+                normalized = ipaddress.ip_address(self.remote_ip).compressed.casefold()
+            except ValueError:
+                raise ValueError("remote_ip must be an IP literal or None") from None
+            if not self.success:
+                raise ValueError("a failed ping must not report remote_ip")
+            object.__setattr__(self, "remote_ip", normalized)
 
 
 @runtime_checkable
@@ -118,6 +128,13 @@ class SafePingAdapter:
                 request.probe_id,
                 NetworkProbeState.FAILED,
                 "Falha ao executar ping.",
+                now_monotonic,
+            )
+        if backend_result.unavailable:
+            return self._result(
+                request.probe_id,
+                NetworkProbeState.FAILED,
+                "Backend seguro de ping indisponível.",
                 now_monotonic,
             )
         if backend_result.timed_out:
