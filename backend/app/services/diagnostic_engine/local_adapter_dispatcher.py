@@ -19,6 +19,7 @@ from app.services.diagnostic_engine.local_executor_models import (
 from app.services.diagnostic_engine.local_executor_policy import DiagnosticLocalExecutorPolicy
 from app.services.diagnostic_engine.local_system_information_adapter import LocalSystemInformationAdapter
 from app.services.diagnostic_engine.local_windows_service_adapter import LocalWindowsServiceAdapter
+from app.services.diagnostic_engine.local_process_adapter import LocalProcessAdapter
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,7 @@ class LocalAdapterDispatcher:
     windows_service_adapter: LocalWindowsServiceAdapter = field(
         default_factory=LocalWindowsServiceAdapter
     )
+    process_adapter: LocalProcessAdapter = field(default_factory=LocalProcessAdapter)
     _registry: Mapping[str, object] = field(init=False, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
@@ -95,13 +97,17 @@ class LocalAdapterDispatcher:
             raise ValueError("event_log_adapter must be a LocalEventLogAdapter")
         if not isinstance(self.windows_service_adapter, LocalWindowsServiceAdapter):
             raise ValueError("windows_service_adapter must be a LocalWindowsServiceAdapter")
+        if not isinstance(self.process_adapter, LocalProcessAdapter):
+            raise ValueError("process_adapter must be a LocalProcessAdapter")
         registry = {
             "check_disk_information": self.disk_information_adapter,
             "check_disk_space": self.disk_information_adapter,
             "check_service_status": self.windows_service_adapter,
             "collect_event_logs": self.event_log_adapter,
+            "list_processes": self.process_adapter,
             "list_windows_services": self.windows_service_adapter,
             "read_system_information": self.system_information_adapter,
+            "read_system_process_information": self.process_adapter,
         }
         object.__setattr__(self, "_registry", MappingProxyType(registry))
 
@@ -190,6 +196,8 @@ class LocalAdapterDispatcher:
             "collect_event_logs": LocalAdapterType.WINDOWS_EVENT_LOG,
             "list_windows_services": LocalAdapterType.WINDOWS_SERVICE,
             "check_service_status": LocalAdapterType.WINDOWS_SERVICE,
+            "list_processes": LocalAdapterType.PROCESS,
+            "read_system_process_information": LocalAdapterType.PROCESS,
         }.get(command.operation_name)
         if expected_adapter is None or not self.contains(command.operation_name):
             return "Operação local não registrada."

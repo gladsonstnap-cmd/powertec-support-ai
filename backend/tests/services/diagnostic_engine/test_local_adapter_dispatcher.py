@@ -29,7 +29,8 @@ PACKAGE = DISPATCHER_FILE.with_name("__init__.py")
 OPERATIONS = ("check_disk_information", "check_disk_space", "read_system_information")
 SUPPORTED_OPERATIONS = (
     "check_disk_information", "check_disk_space", "check_service_status",
-    "collect_event_logs", "list_windows_services", "read_system_information",
+    "collect_event_logs", "list_processes", "list_windows_services",
+    "read_system_information", "read_system_process_information",
 )
 
 
