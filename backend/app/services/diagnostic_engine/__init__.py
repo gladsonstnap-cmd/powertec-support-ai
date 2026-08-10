@@ -102,6 +102,15 @@ from app.services.diagnostic_engine.local_event_log_adapter import LocalEventLog
 from app.services.diagnostic_engine.local_windows_service_adapter import LocalWindowsServiceAdapter
 from app.services.diagnostic_engine.local_process_adapter import LocalProcessAdapter
 from app.services.diagnostic_engine.local_network_diagnostic_adapter import LocalNetworkDiagnosticAdapter
+from app.services.diagnostic_engine.network_probe_models import (
+    NetworkProbeBlockReason,
+    NetworkProbeRequest,
+    NetworkProbeResult,
+    NetworkProbeState,
+    NetworkProbeTarget,
+    NetworkProbeType,
+)
+from app.services.diagnostic_engine.network_probe_policy import NetworkProbePolicy
 from app.services.diagnostic_engine.local_adapter_dispatcher import (
     LocalAdapterDispatcher,
     LocalAdapterDispatchResult,
@@ -128,6 +137,13 @@ __all__ = [
     "LocalWindowsServiceAdapter",
     "LocalProcessAdapter",
     "LocalNetworkDiagnosticAdapter",
+    "NetworkProbeBlockReason",
+    "NetworkProbeRequest",
+    "NetworkProbeResult",
+    "NetworkProbeState",
+    "NetworkProbeTarget",
+    "NetworkProbeType",
+    "NetworkProbePolicy",
     "LocalAdapterDispatcher",
     "LocalAdapterDispatchResult",
     "AllowedLocalOperation",
