@@ -111,6 +111,10 @@ from app.services.diagnostic_engine.network_probe_models import (
     NetworkProbeType,
 )
 from app.services.diagnostic_engine.network_probe_policy import NetworkProbePolicy
+from app.services.diagnostic_engine.network_probe_validator import (
+    NetworkProbeValidationResult,
+    NetworkProbeValidator,
+)
 from app.services.diagnostic_engine.local_adapter_dispatcher import (
     LocalAdapterDispatcher,
     LocalAdapterDispatchResult,
@@ -144,6 +148,8 @@ __all__ = [
     "NetworkProbeTarget",
     "NetworkProbeType",
     "NetworkProbePolicy",
+    "NetworkProbeValidationResult",
+    "NetworkProbeValidator",
     "LocalAdapterDispatcher",
     "LocalAdapterDispatchResult",
     "AllowedLocalOperation",
