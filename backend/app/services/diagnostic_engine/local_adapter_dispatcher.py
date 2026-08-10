@@ -20,6 +20,7 @@ from app.services.diagnostic_engine.local_executor_policy import DiagnosticLocal
 from app.services.diagnostic_engine.local_system_information_adapter import LocalSystemInformationAdapter
 from app.services.diagnostic_engine.local_windows_service_adapter import LocalWindowsServiceAdapter
 from app.services.diagnostic_engine.local_process_adapter import LocalProcessAdapter
+from app.services.diagnostic_engine.local_network_diagnostic_adapter import LocalNetworkDiagnosticAdapter
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,9 @@ class LocalAdapterDispatcher:
         default_factory=LocalWindowsServiceAdapter
     )
     process_adapter: LocalProcessAdapter = field(default_factory=LocalProcessAdapter)
+    network_diagnostic_adapter: LocalNetworkDiagnosticAdapter = field(
+        default_factory=LocalNetworkDiagnosticAdapter
+    )
     _registry: Mapping[str, object] = field(init=False, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
@@ -99,9 +103,12 @@ class LocalAdapterDispatcher:
             raise ValueError("windows_service_adapter must be a LocalWindowsServiceAdapter")
         if not isinstance(self.process_adapter, LocalProcessAdapter):
             raise ValueError("process_adapter must be a LocalProcessAdapter")
+        if not isinstance(self.network_diagnostic_adapter, LocalNetworkDiagnosticAdapter):
+            raise ValueError("network_diagnostic_adapter must be a LocalNetworkDiagnosticAdapter")
         registry = {
             "check_disk_information": self.disk_information_adapter,
             "check_disk_space": self.disk_information_adapter,
+            "check_network_configuration": self.network_diagnostic_adapter,
             "check_service_status": self.windows_service_adapter,
             "collect_event_logs": self.event_log_adapter,
             "list_processes": self.process_adapter,
@@ -198,6 +205,7 @@ class LocalAdapterDispatcher:
             "check_service_status": LocalAdapterType.WINDOWS_SERVICE,
             "list_processes": LocalAdapterType.PROCESS,
             "read_system_process_information": LocalAdapterType.PROCESS,
+            "check_network_configuration": LocalAdapterType.NETWORK_DIAGNOSTIC,
         }.get(command.operation_name)
         if expected_adapter is None or not self.contains(command.operation_name):
             return "Operação local não registrada."
@@ -207,7 +215,12 @@ class LocalAdapterDispatcher:
             return "Adapter local incompatível."
         if operation.operation_type != LocalOperationType.READ_ONLY or command.operation_type != LocalOperationType.READ_ONLY:
             return "Tipo de operação incompatível."
-        if command.target != ExecutionTarget.WINDOWS or ExecutionTarget.WINDOWS not in operation.allowed_targets:
+        expected_target = (
+            ExecutionTarget.NETWORK
+            if expected_adapter == LocalAdapterType.NETWORK_DIAGNOSTIC
+            else ExecutionTarget.WINDOWS
+        )
+        if command.target != expected_target or expected_target not in operation.allowed_targets:
             return "Target local incompatível."
         if command.risk != ExecutionRisk.LOW or ExecutionRisk.LOW not in operation.allowed_risks:
             return "Risco local incompatível."

@@ -25,13 +25,13 @@ ROOT = HERE.parents[3]
 DISPATCHER_FILE = ROOT / "app/services/diagnostic_engine/local_adapter_dispatcher.py"
 PACKAGE_FILE = DISPATCHER_FILE.with_name("__init__.py")
 OPERATIONS = (
-    "check_disk_information", "check_disk_space", "check_service_status",
+    "check_disk_information", "check_disk_space", "check_network_configuration", "check_service_status",
     "collect_event_logs", "list_processes", "list_windows_services",
     "read_system_information", "read_system_process_information",
 )
 SERVICE_OPERATIONS = ("list_windows_services", "check_service_status")
 UNSUPPORTED = (
-    "check_network_configuration", "ping_host", "check_port", "validate_configuration", "start_service",
+    "ping_host", "check_port", "validate_configuration", "start_service",
     "stop_service", "restart_service", "pause_service", "resume_service",
     "change_service_startup_type", "install_service", "remove_service", "unknown",
 )
