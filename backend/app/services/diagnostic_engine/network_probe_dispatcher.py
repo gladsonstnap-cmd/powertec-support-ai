@@ -102,15 +102,18 @@ class NetworkProbeDispatcher:
             and adapter.backend is None
             and self.safe_ping_backend_factory is not None
         ):
-            backend = self.safe_ping_backend_factory.build(
-                network_probe_policy=self.policy,
-                explicit_real_execution=True,
-                probe_type=request.probe_type,
-                timeout_ms=request.timeout_ms,
-                attempts=request.attempt,
-            )
-            if backend is not None:
-                adapter = SafePingAdapter(policy=self.policy, backend=backend)
+            try:
+                backend = self.safe_ping_backend_factory.build(
+                    network_probe_policy=self.policy,
+                    explicit_real_execution=True,
+                    probe_type=request.probe_type,
+                    timeout_ms=request.timeout_ms,
+                    attempts=request.attempt,
+                )
+                if backend is not None:
+                    adapter = SafePingAdapter(policy=self.policy, backend=backend)
+            except Exception:
+                pass
         try:
             result = adapter.execute(request, now_monotonic)
         except Exception:
