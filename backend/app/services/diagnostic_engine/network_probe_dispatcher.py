@@ -12,6 +12,7 @@ from app.services.diagnostic_engine.network_probe_models import (
 )
 from app.services.diagnostic_engine.network_probe_policy import NetworkProbePolicy
 from app.services.diagnostic_engine.safe_ping_adapter import SafePingAdapter
+from app.services.diagnostic_engine.safe_ping_activation import SafePingBackendFactory
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class NetworkProbeDispatchResult:
 class NetworkProbeDispatcher:
     policy: NetworkProbePolicy = field(default_factory=NetworkProbePolicy)
     ping_adapter: SafePingAdapter | None = None
+    safe_ping_backend_factory: SafePingBackendFactory | None = None
     _registry: Mapping[NetworkProbeType, SafePingAdapter] = field(
         init=False, repr=False, compare=False, hash=False
     )
@@ -62,6 +64,10 @@ class NetworkProbeDispatcher:
             raise ValueError("ping_adapter must be a SafePingAdapter")
         if adapter.policy != self.policy:
             raise ValueError("ping_adapter and dispatcher must use the same policy")
+        if self.safe_ping_backend_factory is not None and not isinstance(
+            self.safe_ping_backend_factory, SafePingBackendFactory
+        ):
+            raise ValueError("safe_ping_backend_factory must be a SafePingBackendFactory or None")
         object.__setattr__(
             self,
             "_registry",
@@ -91,6 +97,20 @@ class NetworkProbeDispatcher:
         adapter = self.resolve(request.probe_type)
         if adapter is None:
             return self._failure("Tipo de probe não suportado.", request.probe_type)
+        if (
+            not request.dry_run
+            and adapter.backend is None
+            and self.safe_ping_backend_factory is not None
+        ):
+            backend = self.safe_ping_backend_factory.build(
+                network_probe_policy=self.policy,
+                explicit_real_execution=True,
+                probe_type=request.probe_type,
+                timeout_ms=request.timeout_ms,
+                attempts=request.attempt,
+            )
+            if backend is not None:
+                adapter = SafePingAdapter(policy=self.policy, backend=backend)
         try:
             result = adapter.execute(request, now_monotonic)
         except Exception:
