@@ -291,7 +291,8 @@ class NetworkProbeRateLimiter:
         if trail is not None:
             timestamps.extend(
                 item.timestamp_monotonic for item in trail.events
-                if self._audit_event_counts(item.event_type)
+                if item.probe_id != request.probe_id
+                and self._audit_event_counts(item.event_type)
                 and (not same_target or (item.host, item.port) == target)
             )
         return max(timestamps, default=None)
