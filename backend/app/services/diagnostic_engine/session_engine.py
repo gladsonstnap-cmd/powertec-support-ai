@@ -37,14 +37,25 @@ from app.services.diagnostic_engine.network_probe_dispatcher import (
     NetworkProbeDispatcher,
     NetworkProbeDispatchResult,
 )
+from app.services.diagnostic_engine.network_probe_audit import (
+    NetworkProbeAuditEvent,
+    NetworkProbeAuditEventType,
+    append_event,
+)
 from app.services.diagnostic_engine.network_probe_models import (
     NetworkProbeRequest,
+    NetworkProbeState,
     NetworkProbeType,
 )
 from app.services.diagnostic_engine.network_probe_policy import NetworkProbePolicy
 from app.services.diagnostic_engine.network_probe_validator import (
     NetworkProbeValidationResult,
     NetworkProbeValidator,
+)
+from app.services.diagnostic_engine.network_probe_rate_limit import (
+    NetworkProbeRateLimitBlockReason,
+    NetworkProbeRateLimiter,
+    NetworkProbeRateLimitResult,
 )
 from app.services.diagnostic_engine.normalization import normalize_text
 from app.services.diagnostic_engine.models import DiagnosticContext
@@ -134,6 +145,7 @@ class DiagnosticSessionEngine:
         local_adapter_dispatcher: LocalAdapterDispatcher | None = None,
         network_probe_validator: NetworkProbeValidator | None = None,
         network_probe_dispatcher: NetworkProbeDispatcher | None = None,
+        network_probe_rate_limiter: NetworkProbeRateLimiter | None = None,
     ) -> None:
         self.workflow_engine = workflow_engine if workflow_engine is not None else DiagnosticWorkflowEngine()
         self.policy = policy if policy is not None else DiagnosticSessionPolicy()
@@ -192,6 +204,11 @@ class DiagnosticSessionEngine:
             network_probe_dispatcher
             if network_probe_dispatcher is not None
             else NetworkProbeDispatcher(shared_probe_policy)
+        )
+        self.network_probe_rate_limiter = (
+            network_probe_rate_limiter
+            if network_probe_rate_limiter is not None
+            else NetworkProbeRateLimiter()
         )
 
     def start_session(
@@ -923,8 +940,20 @@ class DiagnosticSessionEngine:
         except Exception:
             return self._network_probe_failure_turn(session, "Falha no probe de rede.")
         if not validation.success or validation.request is None:
-            return self._network_probe_failure_turn(
+            blocked = self._append_network_probe_audit(
                 session,
+                event_type=NetworkProbeAuditEventType.VALIDATION_BLOCKED,
+                probe_id=probe_id,
+                request_id=request_id,
+                action_id=action_id,
+                probe_type=probe_type,
+                host=host,
+                port=port,
+                timestamp_monotonic=created_at_monotonic,
+                message="Validação estrutural do probe bloqueada.",
+            )
+            return self._network_probe_failure_turn(
+                blocked,
                 *(validation.errors or ("O validator bloqueou o probe de rede.",)),
             )
         candidate = validation.request
@@ -944,10 +973,17 @@ class DiagnosticSessionEngine:
                 session.status,
                 False,
             )
+        trail = session.network_probe_audit_trail
+        for event_type, message in (
+            (NetworkProbeAuditEventType.REQUEST_CREATED, "Request estrutural de probe criado."),
+            (NetworkProbeAuditEventType.VALIDATION_PASSED, "Validação estrutural do probe aprovada."),
+        ):
+            trail = self._append_network_probe_event(trail, candidate, event_type, created_at_monotonic, message)
         updated = replace(
             session,
             network_probe_requests=(*session.network_probe_requests, candidate),
             current_network_probe_request=candidate,
+            network_probe_audit_trail=trail,
         )
         return self._turn(
             updated,
@@ -975,6 +1011,50 @@ class DiagnosticSessionEngine:
         )
         if request is None:
             return self._network_probe_failure_turn(session, "Request de probe de rede não encontrado.")
+        prior_requests = tuple(
+            item for item in session.network_probe_requests if item is not request
+        )
+        try:
+            rate_result = self.network_probe_rate_limiter.evaluate(
+                request=request,
+                existing_requests=prior_requests,
+                existing_results=session.network_probe_results,
+                audit_trail=session.network_probe_audit_trail,
+                now_monotonic=now_monotonic,
+            )
+            if not isinstance(rate_result, NetworkProbeRateLimitResult):
+                raise TypeError("invalid network probe rate limit result")
+        except Exception:
+            rate_result = NetworkProbeRateLimitResult(
+                allowed=False,
+                block_reason=NetworkProbeRateLimitBlockReason.INVALID_HISTORY,
+                message="Falha na validação de limite do probe de rede.",
+            )
+        if not rate_result.allowed:
+            event_type = self._rate_limit_audit_event_type(rate_result.block_reason)
+            trail = self._append_network_probe_event(
+                session.network_probe_audit_trail,
+                request,
+                event_type,
+                now_monotonic,
+                "Probe bloqueado pelo limite estrutural.",
+            )
+            error = (
+                "Falha na validação de limite do probe de rede."
+                if rate_result.block_reason == NetworkProbeRateLimitBlockReason.INVALID_HISTORY
+                else "Probe de rede bloqueado pelo limite estrutural."
+            )
+            metadata = self._metadata_with_network_probe_errors(dict(session.metadata), (error,))
+            updated = replace(session, network_probe_audit_trail=trail, metadata=metadata)
+            return self._turn(updated, None, "O probe de rede foi bloqueado de forma controlada.", session.status, True, errors=(error,))
+
+        trail = self._append_network_probe_event(
+            session.network_probe_audit_trail,
+            request,
+            NetworkProbeAuditEventType.DISPATCH_REQUESTED,
+            now_monotonic,
+            "Dispatch estrutural do probe solicitado.",
+        )
         try:
             dispatch_result = self.network_probe_dispatcher.dispatch(request, now_monotonic)
             if not isinstance(dispatch_result, NetworkProbeDispatchResult):
@@ -988,6 +1068,14 @@ class DiagnosticSessionEngine:
         errors = tuple(dict.fromkeys(dispatch_result.errors))
         metadata = self._metadata_with_network_probe_errors(dict(session.metadata), errors)
         probe_result = dispatch_result.result
+        outcome_type = self._dispatch_audit_event_type(dispatch_result)
+        trail = self._append_network_probe_event(
+            trail,
+            request,
+            outcome_type,
+            now_monotonic,
+            "Resultado estrutural do dispatch registrado.",
+        )
         updated = replace(
             session,
             network_probe_dispatch_results=(
@@ -1005,6 +1093,7 @@ class DiagnosticSessionEngine:
                 probe_result if probe_result is not None else session.current_network_probe_result
             ),
             metadata=metadata,
+            network_probe_audit_trail=trail,
         )
         response = (
             "Dry-run de ping concluído; nenhum pacote foi enviado."
@@ -1021,6 +1110,76 @@ class DiagnosticSessionEngine:
             True,
             errors=errors,
         )
+
+    @staticmethod
+    def _rate_limit_audit_event_type(reason):
+        mapping = {
+            NetworkProbeRateLimitBlockReason.SESSION_LIMIT_REACHED: NetworkProbeAuditEventType.SESSION_LIMIT_REACHED,
+            NetworkProbeRateLimitBlockReason.GLOBAL_COOLDOWN: NetworkProbeAuditEventType.COOLDOWN_BLOCKED,
+            NetworkProbeRateLimitBlockReason.TARGET_COOLDOWN: NetworkProbeAuditEventType.COOLDOWN_BLOCKED,
+            NetworkProbeRateLimitBlockReason.DUPLICATE_PENDING_REQUEST: NetworkProbeAuditEventType.DUPLICATE_BLOCKED,
+            NetworkProbeRateLimitBlockReason.DUPLICATE_INFLIGHT_PROBE: NetworkProbeAuditEventType.DUPLICATE_BLOCKED,
+        }
+        return mapping.get(reason, NetworkProbeAuditEventType.RATE_LIMITED)
+
+    @staticmethod
+    def _dispatch_audit_event_type(dispatch_result: NetworkProbeDispatchResult):
+        if dispatch_result.result is None or dispatch_result.result.state == NetworkProbeState.BLOCKED:
+            return NetworkProbeAuditEventType.DISPATCH_BLOCKED
+        return {
+            NetworkProbeState.SUCCESS: NetworkProbeAuditEventType.PROBE_SUCCEEDED,
+            NetworkProbeState.TIMED_OUT: NetworkProbeAuditEventType.PROBE_TIMED_OUT,
+            NetworkProbeState.CANCELLED: NetworkProbeAuditEventType.CANCELLED,
+        }.get(dispatch_result.result.state, NetworkProbeAuditEventType.PROBE_FAILED)
+
+    @staticmethod
+    def _append_network_probe_event(trail, request, event_type, timestamp_monotonic, message):
+        event = NetworkProbeAuditEvent(
+            event_id=f"{request.probe_id}:event:{len(trail.events):06d}",
+            probe_id=request.probe_id,
+            session_id=request.session_id,
+            request_id=request.request_id,
+            action_id=request.action_id,
+            probe_type=request.probe_type,
+            host=request.target.host,
+            port=request.target.port,
+            event_type=event_type,
+            timestamp_monotonic=timestamp_monotonic,
+            message=message,
+        )
+        return append_event(trail, event)
+
+    @staticmethod
+    def _append_network_probe_audit(
+        session,
+        *,
+        event_type,
+        probe_id,
+        request_id,
+        action_id,
+        probe_type,
+        host,
+        port,
+        timestamp_monotonic,
+        message,
+    ):
+        try:
+            event = NetworkProbeAuditEvent(
+                event_id=f"{probe_id}:event:{len(session.network_probe_audit_trail.events):06d}",
+                probe_id=probe_id,
+                session_id=session.session_id,
+                request_id=request_id,
+                action_id=action_id,
+                probe_type=probe_type,
+                host=host,
+                port=port,
+                event_type=event_type,
+                timestamp_monotonic=timestamp_monotonic,
+                message=message,
+            )
+            return replace(session, network_probe_audit_trail=append_event(session.network_probe_audit_trail, event))
+        except (TypeError, ValueError):
+            return session
 
     @staticmethod
     def _find_grant(session: DiagnosticSession, grant_id: str):

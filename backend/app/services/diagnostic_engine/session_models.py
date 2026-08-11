@@ -24,6 +24,7 @@ from app.services.diagnostic_engine.local_executor_models import (
     LocalSanitizedResult,
 )
 from app.services.diagnostic_engine.network_probe_dispatcher import NetworkProbeDispatchResult
+from app.services.diagnostic_engine.network_probe_audit import NetworkProbeAuditTrail
 from app.services.diagnostic_engine.network_probe_models import NetworkProbeRequest, NetworkProbeResult
 from app.services.diagnostic_engine.hypothesis_models import Hypothesis
 from app.services.diagnostic_engine.knowledge_models import KnowledgeSearchResult
@@ -97,6 +98,7 @@ class DiagnosticSession:
     interaction_count: int = 0
     metadata: dict[str, object] = field(default_factory=dict)
     errors: tuple[str, ...] = ()
+    network_probe_audit_trail: NetworkProbeAuditTrail | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -137,6 +139,12 @@ class DiagnosticSession:
         object.__setattr__(self, "current_network_probe_request", deepcopy(self.current_network_probe_request))
         object.__setattr__(self, "current_network_probe_result", deepcopy(self.current_network_probe_result))
         object.__setattr__(self, "current_network_probe_dispatch_result", deepcopy(self.current_network_probe_dispatch_result))
+        trail = self.network_probe_audit_trail
+        if trail is None:
+            trail = NetworkProbeAuditTrail(self.session_id)
+        elif not isinstance(trail, NetworkProbeAuditTrail) or trail.session_id != self.session_id:
+            raise ValueError("network_probe_audit_trail must belong to the session")
+        object.__setattr__(self, "network_probe_audit_trail", deepcopy(trail))
         object.__setattr__(self, "metadata", deepcopy(dict(self.metadata)))
 
 
